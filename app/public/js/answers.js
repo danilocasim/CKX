@@ -1,3 +1,5 @@
+import { fetchExamAnswers, getExamId as getExamIdFromApi } from './components/exam-api.js';
+
 document.addEventListener('DOMContentLoaded', function() {
     // DOM elements
     const pageLoader = document.getElementById('pageLoader');
@@ -15,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize
     function init() {
         // Get exam ID from URL
-        currentExamId = getExamIdFromUrl();
+        currentExamId = getExamIdFromApi();
         
         if (!currentExamId) {
             showError('No exam ID provided. Please return to the results page.');
@@ -31,12 +33,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Setup event listeners
         backToResultsBtn.addEventListener('click', goBackToResults);
         retryButton.addEventListener('click', () => fetchAnswers(currentExamId));
-    }
-    
-    // Get exam ID from URL
-    function getExamIdFromUrl() {
-        const urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get('id');
     }
     
     // Go back to results page
@@ -64,13 +60,7 @@ document.addEventListener('DOMContentLoaded', function() {
         answersContent.style.display = 'none';
         
         // Fetch answers file
-        fetch(`/facilitator/api/v1/exams/${examId}/answers`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                return response.text(); // Get raw text (Markdown content)
-            })
+        fetchExamAnswers(examId)
             .then(markdownText => {
                 // Render markdown
                 renderMarkdown(markdownText);

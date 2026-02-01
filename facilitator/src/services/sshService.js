@@ -69,7 +69,8 @@ async function executeCommand(command) {
         logger.error('Failed to read private key', { error: err.message });
         return reject(new Error(`Failed to read private key: ${err.message}`));
       }
-    } else if (config.ssh.password) {
+    } else if (config.ssh.password !== undefined) {
+      // Use password authentication (including empty password for hosts that allow it)
       logger.info('Using password authentication');
       connectionConfig.password = config.ssh.password;
     } else {

@@ -61,8 +61,11 @@ export KUBECONFIG=/home/candidate/.kube/kubeconfig
 
 sleep 5
 
+log "Waiting for API server to be ready..."
 #wait till api-server is ready
 while ! kubectl get nodes > /dev/null 2>&1; do
+  log "API server not ready yet. Retrying in 5 seconds..."
+  kubectl get nodes
   sleep 5
 done
 

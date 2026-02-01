@@ -76,6 +76,7 @@ kubectl apply -f pvc.yaml -n storage-test
 ## Question 5: The deployment 'broken-app' in namespace 'troubleshooting' is failing to start. Identify and fix the issue
 
 Troubleshooting steps:
+
 ```bash
 # Check the pods in the troubleshooting namespace
 kubectl get pods -n troubleshooting
@@ -88,7 +89,8 @@ kubectl logs <pod-name> -n troubleshooting
 ```
 
 Potential fixes:
-1. If the image is incorrect: 
+
+1. If the image is incorrect:
    ```bash
    kubectl set image deployments -n troubleshooting broken-app app=nginx:latest
    ```
@@ -111,20 +113,25 @@ metadata:
   namespace: troubleshooting
 spec:
   containers:
-  - name: nginx
-    image: nginx
-    volumeMounts:
-    - name: log-volume
-      mountPath: /var/my-log
-  - name: sidecar
-    image: busybox
-    command: ["sh", "-c", "while true; do date >> /var/my-log/date.log; sleep 10; done"]
-    volumeMounts:
-    - name: log-volume
-      mountPath: /var/my-log
+    - name: nginx
+      image: nginx
+      volumeMounts:
+        - name: log-volume
+          mountPath: /var/my-log
+    - name: sidecar
+      image: busybox
+      command:
+        [
+          'sh',
+          '-c',
+          'while true; do date >> /var/my-log/date.log; sleep 10; done',
+        ]
+      volumeMounts:
+        - name: log-volume
+          mountPath: /var/my-log
   volumes:
-  - name: log-volume
-    emptyDir: {}
+    - name: log-volume
+      emptyDir: {}
 ```
 
 Save this as `sidecar-pod.yaml` and apply:
@@ -149,6 +156,7 @@ kubectl describe pod sidecar-pod -n troubleshooting
 ## Question 7: Service 'web-service' in namespace 'troubleshooting' is not routing traffic to pods properly. Identify and fix the issue
 
 Troubleshooting steps:
+
 ```bash
 # Check the service configuration
 kubectl get svc web-service -n troubleshooting
@@ -161,6 +169,7 @@ kubectl describe svc web-service -n troubleshooting
 Solution approach based on typical issues:
 
 1. If the service selector doesn't match any pod labels, fix the service selector:
+
 ```yaml
 apiVersion: v1
 kind: Service
@@ -169,13 +178,14 @@ metadata:
   namespace: troubleshooting
 spec:
   selector:
-    app: web-app  
+    app: web-app
   ports:
-  - port: 80
-    targetPort: 80
+    - port: 80
+      targetPort: 80
 ```
 
 2. Save as `fixed-service.yaml` and apply:
+
 ```bash
 kubectl apply -f fixed-service.yaml
 ```
@@ -183,6 +193,7 @@ kubectl apply -f fixed-service.yaml
 ## Question 8: Pod 'logging-pod' in namespace 'troubleshooting' is consuming excessive CPU resources. Set appropriate CPU and memory limits
 
 Solution:
+
 1. After identifying which container is causing high CPU usage, edit the pod to add resource limits:
 
 ```yaml
@@ -193,15 +204,16 @@ metadata:
   namespace: troubleshooting
 spec:
   containers:
-  - name: <container-name>
-    # ... existing container configuration ...
-    resources:
-      limits:
-        cpu: 100m
-        memory: 50Mi
+    - name: <container-name>
+      # ... existing container configuration ...
+      resources:
+        limits:
+          cpu: 100m
+          memory: 50Mi
 ```
 
 Edit the pod to add resource limits and will be saved to tmp/<file.yaml>
+
 ```
 kubectl replace -f tmp/<file.yaml> --force
 ```
@@ -214,6 +226,7 @@ kubectl create configmap app-config -n workloads --from-literal=APP_ENV=producti
 ```
 
 Create the Pod with ConfigMap environment variables:
+
 ```yaml
 apiVersion: v1
 kind: Pod
@@ -222,29 +235,30 @@ metadata:
   namespace: workloads
 spec:
   containers:
-  - name: nginx
-    image: nginx
-    env:
-    - name: APP_ENV
-      valueFrom:
-        configMapKeyRef:
-          name: app-config
-          key: APP_ENV
-    - name: LOG_LEVEL
-      valueFrom:
-        configMapKeyRef:
-          name: app-config
-          key: LOG_LEVEL
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        cpu: 200m
-        memory: 256Mi
+    - name: nginx
+      image: nginx
+      env:
+        - name: APP_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: APP_ENV
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: LOG_LEVEL
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
 ```
 
 Save as `config-pod.yaml` and apply:
+
 ```bash
 kubectl apply -f config-pod.yaml
 ```
@@ -257,6 +271,7 @@ kubectl create secret generic db-credentials -n workloads --from-literal=usernam
 ```
 
 Create the Pod with Secret environment variables:
+
 ```yaml
 apiVersion: v1
 kind: Pod
@@ -265,28 +280,29 @@ metadata:
   namespace: workloads
 spec:
   containers:
-  - name: mysql
-    image: mysql:latest
-    env:
-    - name: DB_USER
-      valueFrom:
-        secretKeyRef:
-          name: db-credentials
-          key: username
-    - name: DB_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: db-credentials
-          key: password
-    - name: MYSQL_ROOT_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: db-credentials
-          key: password
+    - name: mysql
+      image: mysql:latest
+      env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: password
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: password
   restartPolicy: Always
 ```
 
 Save as `secure-pod.yaml` and apply:
+
 ```bash
 kubectl apply -f secure-pod.yaml
 ```
@@ -300,20 +316,20 @@ metadata:
   name: log-cleaner
   namespace: workloads
 spec:
-  schedule: "0 * * * *"  # Run every hour at minute 0
-  concurrencyPolicy: Forbid  # Skip new job if previous is running
-  successfulJobsHistoryLimit: 3  # Keep 3 successful job completions
-  failedJobsHistoryLimit: 1  # Keep 1 failed job
+  schedule: '0 * * * *' # Run every hour at minute 0
+  concurrencyPolicy: Forbid # Skip new job if previous is running
+  successfulJobsHistoryLimit: 3 # Keep 3 successful job completions
+  failedJobsHistoryLimit: 1 # Keep 1 failed job
   jobTemplate:
     spec:
       template:
         spec:
           containers:
-          - name: log-cleaner
-            image: busybox
-            command: ["/bin/sh", "-c"]
-            args:
-            - find /var/log -type f -name "*.log" -mtime +7 -delete
+            - name: log-cleaner
+              image: busybox
+              command: ['/bin/sh', '-c']
+              args:
+                - find /var/log -type f -name "*.log" -mtime +7 -delete
           restartPolicy: OnFailure
 ```
 
@@ -324,6 +340,7 @@ kubectl apply -f log-cleaner-cronjob.yaml
 ```
 
 You can check the cron job configuration:
+
 ```bash
 kubectl get cronjob log-cleaner -n workloads -o yaml
 ```
@@ -338,24 +355,25 @@ metadata:
   namespace: workloads
 spec:
   containers:
-  - name: nginx
-    image: nginx
-    ports:
-    - containerPort: 80
-    livenessProbe:
-      httpGet:
-        path: /healthz
-        port: 80
-      initialDelaySeconds: 30
-      periodSeconds: 15
-    readinessProbe:
-      tcpSocket:
-        port: 80
-      initialDelaySeconds: 5
-      periodSeconds: 10
+    - name: nginx
+      image: nginx
+      ports:
+        - containerPort: 80
+      livenessProbe:
+        httpGet:
+          path: /healthz
+          port: 80
+        initialDelaySeconds: 30
+        periodSeconds: 15
+      readinessProbe:
+        tcpSocket:
+          port: 80
+        initialDelaySeconds: 5
+        periodSeconds: 10
 ```
 
 Save as `health-pod.yaml` and apply:
+
 ```bash
 kubectl apply -f health-pod.yaml
 ```
@@ -368,32 +386,35 @@ kubectl create clusterrole pod-reader --verb=get,watch,list --resource=pods
 ```
 
 Or using YAML:
+
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: pod-reader
 rules:
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "watch", "list"]
+  - apiGroups: ['']
+    resources: ['pods']
+    verbs: ['get', 'watch', 'list']
 ```
 
 Create the ClusterRoleBinding:
+
 ```bash
 kubectl create clusterrolebinding read-pods --clusterrole=pod-reader --user=jane --namespace=cluster-admin
 ```
 
 Or using YAML:
+
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: read-pods
 subjects:
-- kind: User
-  name: jane
-  apiGroup: rbac.authorization.k8s.io
+  - kind: User
+    name: jane
+    apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: ClusterRole
   name: pod-reader
@@ -401,6 +422,7 @@ roleRef:
 ```
 
 Save YAML files and apply them:
+
 ```bash
 kubectl apply -f cluster-role.yaml
 kubectl apply -f cluster-role-binding.yaml
@@ -427,6 +449,7 @@ kubectl get svc -n web
 ```
 
 You can inspect the installation and configuration:
+
 ```bash
 helm list -n web
 kubectl get deployment -n web
@@ -448,24 +471,25 @@ spec:
     singular: backup
   scope: Namespaced
   versions:
-  - name: v1alpha1
-    served: true
-    storage: true
-    schema:
-      openAPIV3Schema:
-        type: object
-        properties:
-          spec:
-            type: object
-            properties:
-              source:
-                type: string
-              destination:
-                type: string
-            required: ["source", "destination"]
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                source:
+                  type: string
+                destination:
+                  type: string
+              required: ['source', 'destination']
 ```
 
 Save as `backup-crd.yaml` and apply:
+
 ```bash
 kubectl apply -f backup-crd.yaml
 ```
@@ -483,16 +507,17 @@ spec:
     matchLabels:
       app: web
   ingress:
-  - from:
-    - podSelector:
-        matchLabels:
-          tier: frontend
-    ports:
-    - protocol: TCP
-      port: 80
+    - from:
+        - podSelector:
+            matchLabels:
+              tier: frontend
+      ports:
+        - protocol: TCP
+          port: 80
 ```
 
 Save as `network-policy.yaml` and apply:
+
 ```bash
 kubectl apply -f network-policy.yaml
 ```
@@ -500,6 +525,7 @@ kubectl apply -f network-policy.yaml
 ## Question 17: Create a ClusterIP service named 'internal-app' in namespace 'networking' that routes traffic to pods with label 'app=backend' on port 8080, exposing the service on port 80
 
 Or using YAML:
+
 ```yaml
 apiVersion: v1
 kind: Service
@@ -511,12 +537,13 @@ spec:
   selector:
     app: backend
   ports:
-  - port: 80
-    targetPort: 8080
-    protocol: TCP
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
 ```
 
 Save as `internal-service.yaml` and apply:
+
 ```bash
 kubectl apply -f internal-service.yaml
 ```
@@ -532,17 +559,17 @@ metadata:
 spec:
   type: NodePort
   selector:
-    app: web-frontend 
+    app: web-frontend
   ports:
     - name: http
       protocol: TCP
-      port: 80           
-      targetPort: 8080  
-      nodePort: 30080    
-
+      port: 80
+      targetPort: 8080
+      nodePort: 30080
 ```
 
 Save as `loadbalancer-service.yaml` and apply:
+
 ```bash
 kubectl apply -f loadbalancer-service.yaml
 ```
@@ -557,19 +584,20 @@ metadata:
   namespace: networking
 spec:
   rules:
-  - host: api.example.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: api-service
-            port:
-              number: 80
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-service
+                port:
+                  number: 80
 ```
 
 Save as `ingress.yaml` and apply:
+
 ```bash
 kubectl apply -f ingress.yaml
 ```
@@ -587,9 +615,9 @@ spec:
   template:
     spec:
       containers:
-      - name: hello
-        image: busybox
-        command: ["sh", "-c", "echo 'Hello from Kubernetes job!'"]
+        - name: hello
+          image: busybox
+          command: ['sh', '-c', "echo 'Hello from Kubernetes job!'"]
       restartPolicy: Never
   backoffLimit: 0
 ```
@@ -601,6 +629,7 @@ kubectl apply -f hello-job.yaml
 ```
 
 You can check the job's status and output:
+
 ```bash
 # Check job status
 kubectl get jobs -n networking
@@ -632,6 +661,7 @@ rm /tmp/nginx-image.tar
 ```
 
 Check the result:
+
 ```bash
 ls -la /root/oci-images
 cat /root/oci-images/index.json  # Verify it's in OCI format

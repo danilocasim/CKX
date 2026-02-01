@@ -152,6 +152,23 @@ function submitFeedback(examId, feedbackData) {
     });
 }
 
+// Function to fetch exam answers
+function fetchExamAnswers(examId) {
+    const apiUrl = `/facilitator/api/v1/exams/${examId}/answers`;
+
+    return fetch(apiUrl)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.text();
+        })
+        .catch(error => {
+            console.error('Error loading exam answers:', error);
+            throw error;
+        });
+}
+
 // Export the API functions
 export {
     getExamId,
@@ -162,5 +179,6 @@ export {
     terminateSession,
     getVncInfo,
     trackExamEvent,
-    submitFeedback
+    submitFeedback,
+    fetchExamAnswers
 }; 

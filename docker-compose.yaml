@@ -209,6 +209,7 @@ services:
       - SSH_HOST=jumphost
       - SSH_PORT=22
       - SSH_USERNAME=candidate
+      - SSH_PASSWORD=  # Empty password for jumphost which allows passwordless auth
       - LOG_LEVEL=info
       - REDIS_HOST=redis
       - REDIS_PORT=6379

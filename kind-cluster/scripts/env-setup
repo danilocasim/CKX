@@ -8,6 +8,7 @@ exec >> /proc/1/fd/1 2>&1
 
 NUM_WORKERS=${1:-0}  # Default to 1 worker if not provided
 CLUSTER_NAME=${2:-cluster}
+API_PORT=6443
 
 # Check if k3d is installed, if not install it
 if ! command -v k3d &> /dev/null; then
@@ -109,7 +110,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') | Docker and KIND environment is ready for us
 
 # Save kubeconfig and set API server address
 cp /home/candidate/.kube/config /home/candidate/.kube/kubeconfig
-sed -i 's|server: https://127\.0\.0\.1:\([0-9]*\)|server: https://k8s-api-server:\1|' /home/candidate/.kube/kubeconfig
+sed -i 's|server: https://127\.0\.0\.1:6443|server: https://k8s-api-server:6443|' /home/candidate/.kube/kubeconfig
 
 export KUBECONFIG=/home/candidate/.kube/kubeconfig
 
