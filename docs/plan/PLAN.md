@@ -12,7 +12,7 @@
 
 This document outlines the complete technical roadmap for transforming CKX from a single-user exam simulator into a scalable multi-user SaaS platform. The plan is divided into sequential phases, each building upon the previous.
 
-**Current Status**: Phases 0-2 complete. Multi-session foundation is working. Ready for Phase 3.
+**Current Status**: Phases 0-3.5 complete. Authentication and exam types implemented. Ready for Phase 4.
 
 **Architecture Decision**: One exam per user at a time. Each user receives an isolated environment (Kubernetes cluster, terminal, desktop). This mirrors real certification exams and optimizes resource utilization.
 
@@ -27,8 +27,8 @@ This document outlines the complete technical roadmap for transforming CKX from 
 | 1.5 | Session Management Integration | ✅ Complete | Port allocator + exam lifecycle integration |
 | 2 | Session Management API | ✅ Complete | REST API for session operations |
 | 3 | User Authentication | ✅ Complete | PostgreSQL, JWT auth, user accounts, CKX webapp protection |
-| 3.5 | Exam Content Restructuring | 🔄 **Next** | Create mock exams for free trial, add type field |
-| 4 | Payment MVP | ⏳ Planned | Mock payment flow, countdown timer, access validation |
+| 3.5 | Exam Content Restructuring | ✅ Complete | Mock exams for free trial, type/isFree fields, access control |
+| 4 | Payment MVP | 🔄 **Next** | Mock payment flow, countdown timer, access validation |
 | 4.5 | Stripe Integration | ⏳ Pending | Real payment processing |
 | 5 | Production Deployment | ⏳ Pending | AWS infrastructure, CI/CD |
 | 6 | Scaling & Performance | ⏳ Pending | Cluster pooling, auto-scaling |
@@ -118,204 +118,39 @@ DELETE /api/v1/sessions/:id          → Terminate session
 
 ---
 
-### Phase 3.5: Exam Content Restructuring 🔄
+### Phase 3.5: Exam Content Restructuring ✅
 
 **Goal**: Create mock exams for free trial and restructure existing exams with type classification.
 
-**Status**: Next
+**Status**: Complete
 
 **Depends on**: Phase 3 complete ✅
 
-#### 3.5.1 Content Strategy
+**Deliverables**:
+- [x] Labs.json updated with `type` and `isFree` fields for all exams
+- [x] Mock exam created for CKAD (5 questions, 30 minutes)
+- [x] Mock exam created for CKA (5 questions, 30 minutes)
+- [x] Mock exam created for CKS (3 questions, 20 minutes)
+- [x] Mock exam created for Docker (3 questions, 15 minutes)
+- [x] Mock exam created for Helm (3 questions, 15 minutes)
+- [x] API filters by `type` and `category` query parameters
+- [x] `optionalAuth` middleware for public/protected endpoints
+- [x] Unauthenticated users only see mock exams
+- [x] Full exams require authentication
 
-Each certification category needs both mock and full exams:
-
-| Category | Mock Exams (Free) | Full Exams (Paid) | Total Questions |
-|----------|-------------------|-------------------|-----------------|
-| CKAD | 1 mock (5 questions) | 2 full exams (17 questions each) | 39 |
-| CKA | 1 mock (5 questions) | 2 full exams (17 questions each) | 39 |
-| CKS | 1 mock (3 questions) | 1 full exam (15 questions) | 18 |
-| Helm | 1 mock (3 questions) | 1 full exam (10 questions) | 13 |
-| Docker | 1 mock (3 questions) | 1 full exam (10 questions) | 13 |
-
-**Mock Exam Design Principles**:
-- Subset of easier questions from full exams
-- Cover key concepts to give users a taste
-- 15-30 minutes duration (vs 2 hours for full)
-- Include at least one "impressive" feature (validation feedback, timer)
-
-#### 3.5.2 Labs.json Schema Update
-
-Update `facilitator/assets/exams/labs.json` to include exam types:
-
-```json
-{
-  "labs": [
-    {
-      "id": "ckad-mock-001",
-      "name": "CKAD Sample Exam",
-      "category": "ckad",
-      "type": "mock",
-      "description": "Try CKAD with 5 sample questions",
-      "questionCount": 5,
-      "duration": 30,
-      "difficulty": "mixed",
-      "assetPath": "assets/exams/ckad/mock-001",
-      "isFree": true
-    },
-    {
-      "id": "ckad-full-001",
-      "name": "CKAD Practice Exam 1",
-      "category": "ckad",
-      "type": "full",
-      "description": "Full CKAD simulation with 17 questions",
-      "questionCount": 17,
-      "duration": 120,
-      "difficulty": "exam-level",
-      "assetPath": "assets/exams/ckad/001",
-      "isFree": false
-    }
-  ]
-}
-```
-
-#### 3.5.3 Mock Exam Directory Structure
-
-Create mock exam assets alongside full exams:
-
-```
-facilitator/assets/exams/
-├── ckad/
-│   ├── mock-001/                    # NEW: Mock exam
-│   │   ├── config.json
-│   │   ├── assessment.json          # 5 questions only
-│   │   ├── answers.md
-│   │   └── scripts/
-│   │       ├── setup/
-│   │       └── validation/
-│   ├── 001/                         # Existing full exam
-│   └── 002/                         # Existing full exam
-├── cka/
-│   ├── mock-001/                    # NEW: Mock exam
-│   ├── 001/
-│   └── 002/
-├── cks/
-│   ├── mock-001/                    # NEW: Mock exam
-│   └── 001/
-├── other/                           # Helm, Docker
-│   ├── helm-mock-001/               # NEW: Mock exam
-│   ├── docker-mock-001/             # NEW: Mock exam
-│   ├── 001/                         # Full Helm exam
-│   └── 002/                         # Full Docker exam
-└── labs.json                        # Updated with all exams
-```
-
-#### 3.5.4 API Updates
-
-Update exam listing API to support filtering by type:
-
-```javascript
-// GET /api/v1/exams?type=mock
-// GET /api/v1/exams?type=full
-// GET /api/v1/exams?category=ckad
-
-async function getExamList(req, res) {
-  const { type, category } = req.query;
-  let labs = await getAllLabs();
-  
-  if (type) {
-    labs = labs.filter(lab => lab.type === type);
-  }
-  
-  if (category) {
-    labs = labs.filter(lab => lab.category === category);
-  }
-  
-  // For unauthenticated users, only show mock exams
-  if (!req.auth) {
-    labs = labs.filter(lab => lab.type === 'mock');
-  }
-  
-  res.json({ success: true, data: labs });
-}
-```
-
-Update exam creation to validate type access:
-
-```javascript
-// POST /api/v1/exams
-async function createExam(req, res) {
-  const { labId } = req.body;
-  const lab = await getLab(labId);
-  
-  if (!lab) {
-    return res.status(404).json({ error: 'Lab not found' });
-  }
-  
-  // Mock exams: optional auth, always allowed
-  if (lab.type === 'mock') {
-    return await startExam(req, res, lab);
-  }
-  
-  // Full exams: require auth + valid access pass
-  if (!req.auth) {
-    return res.status(401).json({ 
-      error: 'Authentication required for full exams' 
-    });
-  }
-  
-  const access = await checkUserAccess(req.auth.userId);
-  if (!access.hasValidPass) {
-    return res.status(403).json({
-      error: 'Access pass required',
-      message: 'Purchase an access pass to take full exams',
-      pricing: '/pricing'
-    });
-  }
-  
-  return await startExam(req, res, lab);
-}
-```
-
-#### 3.5.5 Mock Exam Question Selection
-
-For each mock exam, select questions that:
-1. Cover different topic areas (pods, deployments, services, etc.)
-2. Are moderately difficult (not too easy, not too hard)
-3. Showcase the platform's features (validation, hints, etc.)
-
-**CKAD Mock Exam Example** (5 questions from different domains):
-
-| Q# | Topic | Concept | Source |
-|----|-------|---------|--------|
-| 1 | Pod Design | Create a pod with labels | Full Exam 1, Q3 |
-| 2 | Configuration | ConfigMaps and Secrets | Full Exam 1, Q7 |
-| 3 | Deployments | Create and scale deployment | Full Exam 2, Q2 |
-| 4 | Services | Expose deployment with service | Full Exam 1, Q11 |
-| 5 | Troubleshooting | Fix a broken pod | Full Exam 2, Q15 |
-
-#### 3.5.6 Exit Criteria
-
-- [ ] Labs.json updated with `type` field for all exams
-- [ ] Mock exam created for CKAD (5 questions)
-- [ ] Mock exam created for CKA (5 questions)
-- [ ] Mock exam created for CKS (3 questions)
-- [ ] Mock exam created for Helm (3 questions)
-- [ ] Mock exam created for Docker (3 questions)
-- [ ] API returns exam type in listing
-- [ ] API filters by type parameter
-- [ ] Unauthenticated users only see mock exams
-- [ ] Full exams require authentication
+**Reference**: See `PHASE3.5_EXAM_CONTENT.md` for details.
 
 ---
 
-### Phase 4: Payment Integration ⏳
+## Active Phases
+
+### Phase 4: Payment Integration 🔄
 
 **Goal**: Monetize with time-based access passes (not subscriptions).
 
 **Status**: Planning Complete - MVP Ready
 
-**Depends on**: Phase 3.5 complete (exam types must exist)
+**Depends on**: Phase 3.5 complete ✅
 
 **Reference**: See `PHASE4_PAYMENT_MVP.md` for detailed MVP implementation plan with security analysis.
 
