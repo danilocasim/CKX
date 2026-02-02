@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 
 const features = [
@@ -33,6 +34,8 @@ const certifications = [
 ];
 
 export default function Home() {
+  const { isAuthenticated } = useAuth();
+
   return (
     <Layout>
       {/* Hero Section */}
@@ -49,7 +52,7 @@ export default function Home() {
               Practice with real clusters, get instant feedback, and pass your CKAD, CKA, or CKS exam with confidence.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/register" className="btn btn-primary text-lg">
+              <Link to={isAuthenticated ? "/exams" : "/register"} className="btn btn-primary text-lg">
                 Start Practicing Free
               </Link>
               <Link to="/pricing" className="btn btn-outline text-lg">
@@ -131,7 +134,7 @@ export default function Home() {
           <p className="text-white/80 mb-8">
             Join thousands of engineers who have passed their Kubernetes certifications with Sailor.sh
           </p>
-          <Link to="/register" className="btn bg-white text-primary-600 hover:bg-gray-100">
+          <Link to={isAuthenticated ? "/exams" : "/register"} className="btn bg-white text-primary-600 hover:bg-gray-100">
             Get Started for Free
           </Link>
         </div>
