@@ -26,6 +26,7 @@ const router = express.Router();
 router.post('/', validateCreateSession, sessionController.createSession);
 router.get('/', sessionController.listSessions);
 router.get('/stats', sessionController.getStats);
+router.delete('/all', sessionController.terminateAllSessions);
 router.get('/:sessionId', validateSessionId, sessionController.getSession);
 router.get('/:sessionId/status', validateSessionId, sessionController.getSessionStatus);
 router.get('/:sessionId/routing', validateSessionId, sessionController.getSessionRouting);

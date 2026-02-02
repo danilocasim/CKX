@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { examApi } from '../services/api';
+import { examApi, sessionApi } from '../services/api';
 import Layout from '../components/Layout';
 
 const categoryIcons = {
@@ -26,10 +26,13 @@ export default function Exams() {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(null);
   const [error, setError] = useState(null);
+  const [sessionCount, setSessionCount] = useState(0);
+  const [clearingAll, setClearingAll] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchLabs();
+    fetchSessionCount();
   }, []);
 
   const fetchLabs = async () => {
@@ -41,6 +44,35 @@ export default function Exams() {
       setError('Failed to load exams. Make sure CKX is running.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSessionCount = async () => {
+    try {
+      const response = await sessionApi.listSessions();
+      const count = response.data.data?.count || response.data.count || 0;
+      setSessionCount(count);
+    } catch (err) {
+      console.error('Failed to fetch session count:', err);
+    }
+  };
+
+  const clearAllSessions = async () => {
+    if (!confirm(`Are you sure you want to clear all ${sessionCount} session(s)?`)) {
+      return;
+    }
+    setClearingAll(true);
+    setError(null);
+    try {
+      await sessionApi.clearAllSessions();
+      setSessionCount(0);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to clear sessions:', err);
+      setError('Failed to clear sessions. Please try again.');
+    } finally {
+      setClearingAll(false);
+      fetchSessionCount();
     }
   };
 
@@ -86,9 +118,25 @@ export default function Exams() {
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Practice Exams</h1>
-          <p className="text-gray-400 mt-1">Choose an exam to start practicing</p>
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-white">Practice Exams</h1>
+            <p className="text-gray-400 mt-1">Choose an exam to start practicing</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-gray-400 text-sm">
+              Active Sessions: <span className={`font-semibold ${sessionCount >= 10 ? 'text-red-400' : 'text-white'}`}>{sessionCount}</span>/10
+            </span>
+            {sessionCount > 0 && (
+              <button
+                onClick={clearAllSessions}
+                disabled={clearingAll}
+                className="btn btn-secondary text-sm px-4 py-2 disabled:opacity-50"
+              >
+                {clearingAll ? 'Clearing...' : `Clear All (${sessionCount})`}
+              </button>
+            )}
+          </div>
         </div>
 
         {error && (

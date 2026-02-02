@@ -208,6 +208,48 @@ const terminateSession = async (req, res) => {
 };
 
 /**
+ * Terminate all sessions
+ * DELETE /api/v1/sessions/all
+ */
+const terminateAllSessions = async (req, res) => {
+  try {
+    const sessions = await sessionOrchestrator.listSessions();
+    const sessionIds = sessions.map(s => s.sessionId || s.id);
+    
+    let terminated = 0;
+    let failed = 0;
+    
+    for (const sessionId of sessionIds) {
+      try {
+        await sessionOrchestrator.terminateSession(sessionId);
+        terminated++;
+      } catch (err) {
+        logger.error(`Failed to terminate session ${sessionId}:`, err);
+        failed++;
+      }
+    }
+
+    logger.info(`Terminated ${terminated} sessions, ${failed} failed`);
+
+    res.json({
+      success: true,
+      data: {
+        terminated,
+        failed,
+        message: `Terminated ${terminated} session(s)${failed > 0 ? `, ${failed} failed` : ''}`
+      }
+    });
+  } catch (error) {
+    logger.error('Failed to terminate all sessions:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      message: error.message
+    });
+  }
+};
+
+/**
  * Get session routing information
  * GET /api/v1/sessions/:sessionId/routing
  */
@@ -351,6 +393,7 @@ module.exports = {
   getSession,
   getSessionStatus,
   terminateSession,
+  terminateAllSessions,
   getSessionRouting,
   getSessionPorts,
   getStats,

@@ -74,6 +74,12 @@ export const userApi = {
   getStats: () => api.get('/users/me/stats'),
 };
 
+// Session API
+export const sessionApi = {
+  listSessions: () => api.get('/sessions'),
+  clearAllSessions: () => api.delete('/sessions/all'),
+};
+
 // Exam API
 export const examApi = {
   listLabs: () => api.get('/exams/labs'),
