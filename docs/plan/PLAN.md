@@ -26,8 +26,8 @@ This document outlines the complete technical roadmap for transforming CKX from 
 | 1 | Session Isolation Foundation | ✅ Complete | Redis changes, port allocation, session-specific paths |
 | 1.5 | Session Management Integration | ✅ Complete | Port allocator + exam lifecycle integration |
 | 2 | Session Management API | ✅ Complete | REST API for session operations |
-| 3 | User Authentication | 🔄 **Next** | PostgreSQL, JWT auth, user accounts |
-| 3.5 | Exam Content Restructuring | ⏳ Pending | Create mock exams for free trial, add type field |
+| 3 | User Authentication | ✅ Complete | PostgreSQL, JWT auth, user accounts |
+| 3.5 | Exam Content Restructuring | 🔄 **Next** | Create mock exams for free trial, add type field |
 | 4 | Payment Integration | ⏳ Pending | Stripe one-time payments, access passes |
 | 5 | Production Deployment | ⏳ Pending | AWS infrastructure, CI/CD |
 | 6 | Scaling & Performance | ⏳ Pending | Cluster pooling, auto-scaling |

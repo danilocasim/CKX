@@ -3,10 +3,12 @@ const cors = require('cors');
 const path = require('path');
 const http = require('http');
 const socketio = require('socket.io');
+const cookieParser = require('cookie-parser');
 const SSHTerminal = require('./services/ssh-terminal');
 const PublicService = require('./services/public-service');
 const RouteService = require('./services/route-service');
 const VNCService = require('./services/vnc-service');
+const AuthService = require('./services/auth-service');
 
 // Server configuration
 const PORT = process.env.PORT || 3000;
@@ -25,6 +27,9 @@ const SSH_PASSWORD = process.env.SSH_PASSWORD || 'password';
 const app = express();
 const server = http.createServer(app);
 const io = socketio(server);
+
+// Initialize Auth Service
+const authService = new AuthService();
 
 // Initialize SSH Terminal
 const sshTerminal = new SSHTerminal({
@@ -55,6 +60,15 @@ sshIO.on('connection', (socket) => {
 // Initialize Route Service
 const routeService = new RouteService(publicService, vncService);
 
+// Enable CORS
+app.use(cors());
+
+// Cookie parser for auth
+app.use(cookieParser());
+
+// Auth middleware - protect all routes
+app.use(authService.authMiddleware());
+
 // Serve static files from the public directory
 app.use(express.static(publicService.getPublicDir()));
 
@@ -63,9 +77,6 @@ vncService.setupVNCProxy(app);
 
 // Setup routes
 routeService.setupRoutes(app);
-
-// Enable CORS
-app.use(cors());
 
 // Start the server
 server.listen(PORT, () => {

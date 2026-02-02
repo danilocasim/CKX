@@ -77,6 +77,7 @@ export const userApi = {
 // Session API
 export const sessionApi = {
   listSessions: () => api.get('/sessions'),
+  createSession: () => api.post('/sessions', { mode: 'SHARED' }),
   clearAllSessions: () => api.delete('/sessions/all'),
 };
 

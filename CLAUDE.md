@@ -38,6 +38,17 @@ cd facilitator && npm install && npm run dev
 
 Note: Local development requires external services (Redis, jumphost, k8s-api-server) to be running.
 
+### Linting
+
+```bash
+# Facilitator (no npm script configured)
+npx eslint facilitator/src --ext .js
+```
+
+### Testing
+
+No automated test suite is configured. When tests are added, run per-package: `cd facilitator && npm test`
+
 ## Architecture
 
 The system runs 8 containerized services orchestrated via Docker Compose:
@@ -50,7 +61,7 @@ The system runs 8 containerized services orchestrated via Docker Compose:
 - **redis** (port 6379) - Session and state management
 - **nginx** (port 30080) - Reverse proxy (only externally exposed service)
 
-All services communicate internally via bridge network `ckx-network`.
+All services communicate internally via bridge network `ckx-network`. A shared volume `kube-config` passes cluster kubeconfig between jumphost and k8s-api-server.
 
 ### Request Flow
 
@@ -72,6 +83,7 @@ All services communicate internally via bridge network `ckx-network`.
 
 - `facilitator/src/services/examService.js` - Core exam lifecycle logic
 - `facilitator/src/services/jumphostService.js` - SSH execution and environment setup
+- `facilitator/src/services/sessionOrchestrator.js` - Multi-session management
 - `facilitator/src/utils/redisClient.js` - Redis state management
 - `app/server.js` - Frontend server with VNC/SSH proxying
 - `app/services/sshTerminalService.js` - xterm.js terminal backend
@@ -88,13 +100,28 @@ Each lab in `facilitator/assets/exams/<category>/<lab-id>/` contains:
 ## API Endpoints
 
 Facilitator service (internal port 3000, accessed via `/facilitator` prefix through nginx):
-- `POST /api/v1/execute` - Execute command on jumphost
+
+### Exam Management
 - `GET /api/v1/exams/` - List exams
 - `POST /api/v1/exams/` - Create new exam
 - `GET /api/v1/exams/current` - Active exam
 - `GET /api/v1/exams/:examId/questions` - Get questions
 - `POST /api/v1/exams/:examId/evaluate` - Evaluate solutions
 - `POST /api/v1/exams/:examId/end` - End exam
+
+### Session Management
+- `POST /api/v1/sessions` - Create session
+- `GET /api/v1/sessions` - List sessions
+- `GET /api/v1/sessions/stats` - Get statistics
+- `GET /api/v1/sessions/:id` - Get session metadata
+- `GET /api/v1/sessions/:id/status` - Get session status
+- `GET /api/v1/sessions/:id/routing` - Get routing info
+- `GET /api/v1/sessions/:id/ports` - Get allocated ports
+- `POST /api/v1/sessions/:id/activate` - Activate session
+- `DELETE /api/v1/sessions/:id` - Terminate session
+
+### SSH Execution
+- `POST /api/v1/execute` - Execute command on jumphost
 
 ## Adding New Labs
 
@@ -105,22 +132,12 @@ Refer to `docs/how-to-add-new-labs.md` for the complete guide. Key requirements:
 - Validation scripts must return exit code 0 for pass, non-zero for fail
 - All setup scripts run simultaneously; ensure questions are independent
 - Use `/tmp/exam` for temporary files; limit to 2 worker nodes max
-
-## Technology Stack
-
-- Node.js/Express.js (backend and frontend servers)
-- Socket.io + xterm.js (SSH terminal)
-- ssh2 module (SSH connections)
-- Redis (state management)
-- KIND (Kubernetes in Docker)
-- Joi (request validation)
-- Winston/Morgan (logging)
+- No direct SSH to cluster nodes (restricts some lab types)
 
 ## Development Notes
 
 - Pure JavaScript codebase (no TypeScript)
 - CommonJS module pattern (require/module.exports)
 - Vanilla JavaScript frontend (no React/Vue)
-- ESLint available in facilitator (`npm run lint` - if configured)
 - Default credentials in docker-compose.yaml are for demo purposes only
-- No direct SSH to cluster nodes (restricts some lab types)
+- Environment variables configure SSH_HOST, REDIS_HOST, PORT, and other runtime behavior

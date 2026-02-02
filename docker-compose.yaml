@@ -44,6 +44,8 @@ services:
       - SSH_PORT=22
       - SSH_USER=candidate
       - SSH_PASSWORD=password
+      - JWT_SECRET=${JWT_SECRET:-ckx-jwt-secret-change-in-production}
+      - SAILOR_CLIENT_URL=http://localhost:3001
     deploy:
       resources:
         limits:
@@ -194,6 +196,36 @@ services:
       timeout: 5s
       retries: 3
 
+  # PostgreSQL Database for User Authentication
+  postgres:
+    image: postgres:15-alpine
+    hostname: postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ckx}
+      POSTGRES_USER: ${POSTGRES_USER:-ckx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ckx-dev-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./facilitator/migrations:/docker-entrypoint-initdb.d:ro
+    expose:
+      - "5432"
+    restart: unless-stopped
+    networks:
+      - ckx-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.2"
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ckx}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Facilitator Service
   facilitator:
     image: nishanb/ck-x-simulator-facilitator:latest
@@ -214,10 +246,22 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - TRACK_METRICS=true # based on the environment variable TRACK_METRICS, the facilitator will send metrics to the metric server
+      # PostgreSQL Configuration
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-ckx}
+      - POSTGRES_USER=${POSTGRES_USER:-ckx}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ckx-dev-password}
+      # JWT Configuration
+      - JWT_SECRET=${JWT_SECRET:-ckx-jwt-secret-change-in-production}
+      - JWT_ACCESS_EXPIRY=15m
+      - JWT_REFRESH_EXPIRY=7d
+      - BCRYPT_ROUNDS=12
     restart: unless-stopped
     depends_on:
       - jumphost
       - redis
+      - postgres
     networks:
       - ckx-network
     deploy:
@@ -241,3 +285,4 @@ networks:
 
 volumes:
   kube-config: # Shared volume for Kubernetes configuration
+  postgres_data: # Persistent storage for PostgreSQL
