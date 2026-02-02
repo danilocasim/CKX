@@ -10,8 +10,13 @@ const logger = require('./logger');
 const KEYS = {
   EXAM_INFO: 'exam:info:',     // For storing JSON exam information
   EXAM_STATUS: 'exam:status:', // For storing exam status string
-  CURRENT_EXAM_ID: 'current-exam-id', // For storing current exam ID (single key)
   EXAM_RESULT: 'exam:result:', // For storing exam evaluation results
+  // Session management keys (multi-session support)
+  ACTIVE_SESSIONS: 'sessions:active',  // Set of active session IDs
+  SESSION_PORTS: 'session:ports:',     // Port allocations per session
+  PORT_ALLOCATIONS: 'ports:allocated', // Hash of allocated ports
+  // DEPRECATED: Single exam tracking removed for multi-session support
+  // CURRENT_EXAM_ID: 'current-exam-id',
 };
 
 // Create Redis client using environment variables
@@ -112,21 +117,94 @@ async function persistExamResult(examId, result, ttl = 3600000) {
 }
 
 /**
+ * Register an active session
+ * @param {string} sessionId - Session identifier (examId)
+ * @param {Object} sessionData - Session metadata (ports, timestamps, etc.)
+ * @param {number} [ttl=3600000] - Time to live in ms (default: 1 hour)
+ * @returns {Promise<string>} - Returns 'OK' if successful
+ */
+async function registerSession(sessionId, sessionData = {}, ttl = 3600000) {
+  try {
+    const client = await getClient();
+    // Add to active sessions set
+    await client.sAdd(KEYS.ACTIVE_SESSIONS, sessionId);
+    // Store session metadata
+    const sessionKey = `${KEYS.SESSION_PORTS}${sessionId}`;
+    await client.setEx(sessionKey, ttl, JSON.stringify({
+      ...sessionData,
+      registeredAt: new Date().toISOString()
+    }));
+    logger.debug(`Registered session ${sessionId}`);
+    return 'OK';
+  } catch (error) {
+    logger.error(`Failed to register session: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Get all active sessions
+ * @returns {Promise<string[]>} - Returns array of active session IDs
+ */
+async function getActiveSessions() {
+  try {
+    const client = await getClient();
+    return await client.sMembers(KEYS.ACTIVE_SESSIONS);
+  } catch (error) {
+    logger.error(`Failed to get active sessions: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Remove a session from active sessions
+ * @param {string} sessionId - Session identifier
+ * @returns {Promise<number>} - Returns 1 if removed, 0 if didn't exist
+ */
+async function unregisterSession(sessionId) {
+  try {
+    const client = await getClient();
+    // Remove from active sessions set
+    const result = await client.sRem(KEYS.ACTIVE_SESSIONS, sessionId);
+    // Delete session metadata
+    const sessionKey = `${KEYS.SESSION_PORTS}${sessionId}`;
+    await client.del(sessionKey);
+    logger.debug(`Unregistered session ${sessionId}`);
+    return result;
+  } catch (error) {
+    logger.error(`Failed to unregister session: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Get session metadata
+ * @param {string} sessionId - Session identifier
+ * @returns {Promise<Object|null>} - Returns session data or null
+ */
+async function getSessionData(sessionId) {
+  try {
+    const client = await getClient();
+    const sessionKey = `${KEYS.SESSION_PORTS}${sessionId}`;
+    const data = await client.get(sessionKey);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    logger.error(`Failed to get session data: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * @deprecated Use registerSession() instead. Kept for backward compatibility.
  * Set the current exam ID
  * @param {string} examId - Exam identifier
  * @param {number} [ttl=3600] - Time to live in seconds (default: 1 hour)
  * @returns {Promise<string>} - Returns 'OK' if successful
  */
 async function setCurrentExamId(examId, ttl = 3600000) {
-  try {
-    const client = await getClient();
-    const result = await client.setEx(KEYS.CURRENT_EXAM_ID, ttl, examId);
-    logger.debug(`Set current exam ID to ${examId}`);
-    return result;
-  } catch (error) {
-    logger.error(`Failed to set current exam ID: ${error.message}`);
-    throw error;
-  }
+  logger.warn('setCurrentExamId is deprecated. Use registerSession() for multi-session support.');
+  // For backward compatibility, also register as session
+  return registerSession(examId, {}, ttl);
 }
 
 /**
@@ -180,13 +258,17 @@ async function getExamResult(examId) {
 }
 
 /**
+ * @deprecated Multi-session mode no longer uses a single "current" exam.
+ * Use getActiveSessions() to list all active sessions.
  * Get the current exam ID
- * @returns {Promise<string|null>} - Returns exam ID string or null if not found
+ * @returns {Promise<string|null>} - Returns first active session or null
  */
 async function getCurrentExamId() {
+  logger.warn('getCurrentExamId is deprecated. Use getActiveSessions() for multi-session support.');
   try {
-    const client = await getClient();
-    return await client.get(KEYS.CURRENT_EXAM_ID);
+    const sessions = await getActiveSessions();
+    // Return first active session for backward compatibility
+    return sessions.length > 0 ? sessions[0] : null;
   } catch (error) {
     logger.error(`Failed to get current exam ID: ${error.message}`);
     throw error;
@@ -216,12 +298,14 @@ async function updateExamStatus(examId, status) {
 }
 
 /**
+ * @deprecated Use registerSession() instead.
  * Update the current exam ID
  * @param {string} examId - Updated exam identifier
  * @param {number} [ttl=3600] - Time to live in seconds (default: 1 hour)
  * @returns {Promise<string>} - Returns 'OK' if successful
  */
 async function updateCurrentExamId(examId) {
+  logger.warn('updateCurrentExamId is deprecated. Use registerSession() for multi-session support.');
   return setCurrentExamId(examId);
 }
 
@@ -280,15 +364,25 @@ async function deleteExamResult(examId) {
 }
 
 /**
+ * @deprecated Use unregisterSession(sessionId) instead.
  * Delete the current exam ID
+ * @param {string} [sessionId] - Optional session ID to unregister
  * @returns {Promise<number>} - Returns 1 if successful, 0 if key didn't exist
  */
-async function deleteCurrentExamId() {
+async function deleteCurrentExamId(sessionId = null) {
+  logger.warn('deleteCurrentExamId is deprecated. Use unregisterSession() for multi-session support.');
   try {
+    if (sessionId) {
+      return unregisterSession(sessionId);
+    }
+    // For backward compatibility without sessionId, clear all active sessions
     const client = await getClient();
-    const result = await client.del(KEYS.CURRENT_EXAM_ID);
-    logger.debug(`Deleted current exam ID`);
-    return result;
+    const sessions = await getActiveSessions();
+    for (const session of sessions) {
+      await unregisterSession(session);
+    }
+    logger.debug(`Deleted current exam ID (cleared ${sessions.length} sessions)`);
+    return sessions.length;
   } catch (error) {
     logger.error(`Failed to delete current exam ID: ${error.message}`);
     throw error;
@@ -323,31 +417,37 @@ module.exports = {
   // Connection
   connect,
   getClient,
-  
+
   // Create operations
   persistExamInfo,
   persistExamStatus,
   persistExamResult,
-  setCurrentExamId,
-  
+  setCurrentExamId,        // @deprecated
+
   // Read operations
   getExamInfo,
   getExamStatus,
   getExamResult,
-  getCurrentExamId,
-  
+  getCurrentExamId,        // @deprecated
+
   // Update operations
   updateExamInfo,
   updateExamStatus,
-  updateCurrentExamId,
-  
+  updateCurrentExamId,     // @deprecated
+
   // Delete operations
   deleteExamInfo,
   deleteExamStatus,
   deleteExamResult,
-  deleteCurrentExamId,
+  deleteCurrentExamId,     // @deprecated
   deleteAllExamData,
-  
+
+  // Multi-session operations (NEW)
+  registerSession,
+  unregisterSession,
+  getActiveSessions,
+  getSessionData,
+
   // Constants
   KEYS
 }; 

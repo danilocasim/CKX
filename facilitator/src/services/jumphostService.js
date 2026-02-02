@@ -16,23 +16,41 @@ const MetricService = require('./metricService');
 
 /**
  * Prepare the exam environment on the jumphost
- * 
+ *
  * This method executes the "prepare-exam-env" command on the jumphost
  * to set up the required number of nodes for the exam. It also updates
  * the exam status in Redis to reflect the preparation process.
- * 
- * @param {string} examId - The ID of the exam to prepare
+ *
+ * Multi-session support: Accepts session ports and only restarts VNC
+ * if this is the first active session (to avoid disrupting other users).
+ *
+ * @param {string} examId - The ID of the exam to prepare (session ID)
  * @param {number} nodeCount - The number of nodes to prepare (default: 1)
+ * @param {Object} sessionPorts - Allocated ports for this session (optional)
  * @returns {Promise<Object>} Result object with success status and data
  */
-async function setupExamEnvironment(examId, nodeCount = 1) {
+async function setupExamEnvironment(examId, nodeCount = 1, sessionPorts = null) {
   try {
     // Update exam status to PREPARING
     await redisClient.persistExamStatus(examId, 'PREPARING');
     logger.info(`Started preparing environment for exam ${examId} with ${nodeCount} nodes`);
-    
-    //restart vnc session
-    await remoteDesktopService.restartVncSession();
+
+    // Multi-session: Only restart VNC if this is the first/only session
+    // This prevents disrupting other active exam sessions
+    const activeSessions = await redisClient.getActiveSessions();
+    const isFirstSession = activeSessions.length <= 1; // This session is already registered
+
+    if (isFirstSession) {
+      logger.info('First session - restarting VNC display');
+      try {
+        await remoteDesktopService.restartVncSession();
+      } catch (vncError) {
+        logger.warn(`VNC restart failed (non-fatal): ${vncError.message}`);
+        // Continue with setup even if VNC restart fails
+      }
+    } else {
+      logger.info(`Skipping VNC restart - ${activeSessions.length} sessions active`);
+    }
 
     // Execute the prepare-exam-env command on the jumphost
     const command = `prepare-exam-env ${nodeCount} ${examId}`;
@@ -100,11 +118,12 @@ async function setupExamEnvironment(examId, nodeCount = 1) {
 
 /**
  * Clean up the exam environment on the jumphost
- * 
+ *
  * This method executes the cleanup command on the jumphost to clean up
  * resources used by the exam. It also updates the exam status in Redis.
- * 
- * @param {string} examId - The ID of the exam to clean up
+ * Multi-session support: Passes examId to cleanup script for session-specific cleanup.
+ *
+ * @param {string} examId - The ID of the exam to clean up (session ID)
  * @returns {Promise<Object>} Result object with success status and data
  */
 async function cleanupExamEnvironment(examId) {
@@ -113,10 +132,9 @@ async function cleanupExamEnvironment(examId) {
     await redisClient.persistExamStatus(examId, 'CLEANING_UP');
     logger.info(`Started cleaning up environment for exam ${examId}`);
 
-    // Execute the cleanup command on the jumphost
-    // Assuming a cleanup script exists on the jumphost
-    const command = 'cleanup-exam-env';
-    
+    // Execute the cleanup command with examId for session-specific cleanup
+    const command = `cleanup-exam-env ${examId}`;
+
     logger.info(`Executing command on jumphost: ${command}`);
     const result = await sshService.executeCommand(command);
 
@@ -181,12 +199,13 @@ async function cleanupExamEnvironment(examId) {
 
 /**
  * Evaluate exam by running verification scripts on jumphost
- * 
+ *
  * This method executes verification scripts for each question and its steps
  * to validate student solutions. It updates the exam status during evaluation
  * and stores the final results in Redis.
- * 
- * @param {string} examId - The ID of the exam to evaluate
+ * Multi-session support: Uses session-specific asset paths.
+ *
+ * @param {string} examId - The ID of the exam to evaluate (session ID)
  * @param {Array} questions - Array of questions with verification steps
  * @returns {Promise<Object>} Result object with evaluation data
  */
@@ -196,7 +215,11 @@ async function evaluateExamOnJumphost(examId, questions) {
     let totalPossibleScore = 0;
     const evaluationResults = [];
 
-    //log number of questions 
+    // Session-specific asset path
+    const examAssetsDir = `/tmp/exam-assets-${examId}`;
+
+    logger.info(`Evaluating exam ${examId}`);
+    logger.info(`Assets directory: ${examAssetsDir}`);
     logger.info(`Number of questions to evaluate: ${questions.length}`);
     
     // Process each question
@@ -223,13 +246,13 @@ async function evaluateExamOnJumphost(examId, questions) {
 
         try {
           // Execute the verification script directly using sshService
-          // The script is located on the jumphost at the specified path
-          const scriptPath = `/tmp/exam-assets/scripts/validation/${verificationScript}`;
-          
+          // Use session-specific asset path for multi-session support
+          const scriptPath = `${examAssetsDir}/scripts/validation/${verificationScript}`;
+
           // Add KUBECONFIG environment variable to ensure all verifications use the correct kube config
           const commandWithKubeconfig = `export KUBECONFIG=/home/candidate/.kube/kubeconfig && ${scriptPath}`;
-          
-          logger.info(`Executing verification script: ${scriptPath} with KUBECONFIG set`);
+
+          logger.info(`Executing verification script: ${scriptPath}`);
           const result = await sshService.executeCommand(commandWithKubeconfig);
           
           // Determine if the verification passed

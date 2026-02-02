@@ -11,6 +11,10 @@ const sshRoutes = require('./routes/sshRoutes');
 const examRoutes = require('./routes/examRoutes');
 const assessmentRoutes = require('./routes/assessmentRoutes');
 const remoteDesktopRoutes = require('./routes/remoteDesktopRoutes');
+const sessionRoutes = require('./routes/sessionRoutes');
+
+// Import services for initialization
+const portAllocator = require('./services/portAllocator');
 
 // Initialize Express app
 const app = express();
@@ -31,6 +35,7 @@ app.use(morgan('combined', {
 // API routes
 app.use('/api/v1', sshRoutes);
 app.use('/api/v1/exams', examRoutes);
+app.use('/api/v1/sessions', sessionRoutes);
 app.use('/api/v1/assements', assessmentRoutes);
 app.use('/api/v1/remote-desktop', remoteDesktopRoutes);
 
@@ -60,13 +65,17 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Initialize Redis connection
+// Initialize Redis connection and port allocator
 (async () => {
   try {
     await redisClient.connect();
     logger.info('Redis connected successfully');
+
+    // Initialize port allocator with Redis client
+    await portAllocator.initialize(redisClient);
+    logger.info('Port allocator initialized');
   } catch (error) {
-    logger.error(`Redis connection failed: ${error.message}`);
+    logger.error(`Initialization failed: ${error.message}`);
   }
 })();
 
