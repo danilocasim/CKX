@@ -17,6 +17,7 @@ Phase 3 implements user authentication and account management for CKX. This enab
 - JWT-based authentication (access + refresh tokens)
 - Exam attempt tracking linked to user accounts
 - Protected routes for authenticated users
+- CKX webapp protected by auth (redirects to sailor-client login)
 - Groundwork for mock vs full exam access control
 
 **Implementation Status**:
@@ -35,6 +36,8 @@ Phase 3 implements user authentication and account management for CKX. This enab
 - [x] App.js updated to register routes and test DB connection
 - [x] Sailor-client React UI integrated with facilitator API
 - [x] Exam listing and start flow connected
+- [x] CKX webapp auth protection (JWT validation, cookie-based sessions)
+- [x] Logout sync between sailor-client and CKX webapp
 
 ---
 
@@ -581,6 +584,8 @@ curl http://localhost:30080/facilitator/api/v1/users/me/exams \
 - [x] Sailor-client UI integrated with facilitator auth API
 - [x] Exam listing endpoint added (`GET /api/v1/exams/labs`)
 - [x] Exam start flow works from sailor-client (opens in new tab)
+- [x] CKX webapp protected by auth middleware
+- [x] Logout clears both sailor-client and CKX sessions
 - [ ] Integration: Exam attempts are linked to user accounts (requires examService.js update)
 
 **Note**: The exam attempt tracking integration with examService.js is deferred to Phase 3.5 when exam types are restructured. The userService already provides `createExamAttempt()` and `updateExamAttempt()` methods for this integration.
@@ -605,7 +610,7 @@ Access at **http://localhost:3001**
 - User registration and login
 - Dashboard with exam statistics
 - Exam browser with category grouping
-- Start exam (opens CKX exam interface in new tab)
+- Start exam (opens CKX exam interface in new tab with JWT token)
 
 ### Architecture
 - React + Vite + Tailwind CSS
@@ -614,7 +619,50 @@ Access at **http://localhost:3001**
 
 ---
 
-## 14. Next Steps (Phase 3.5+)
+## 14. CKX Webapp Auth Protection
+
+The CKX webapp (exam interface at `http://localhost:30080`) is protected by JWT authentication.
+
+### How It Works
+
+1. **User clicks "Start Practicing"** in sailor-client
+2. **Token passed in URL**: Opens `http://localhost:30080/?token=<JWT>`
+3. **Webapp validates token**: Uses same JWT_SECRET as facilitator
+4. **Cookie set**: Valid token stored in httpOnly cookie `ckx_token`
+5. **Redirect to clean URL**: Token removed from URL for security
+6. **Future requests**: Cookie checked for valid token
+7. **Invalid/missing token**: Redirects to `http://localhost:3001/login`
+
+### Logout Flow
+
+When user logs out from sailor-client:
+1. LocalStorage tokens cleared
+2. Facilitator `/auth/logout` called to revoke refresh token
+3. Hidden iframe loads `http://localhost:30080/logout` to clear CKX cookie
+4. Next visit to CKX redirects to login
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `app/services/auth-service.js` | JWT validation, cookie management, auth middleware |
+
+### Environment Variables (webapp)
+
+```yaml
+JWT_SECRET: ${JWT_SECRET:-ckx-jwt-secret-change-in-production}
+SAILOR_CLIENT_URL: http://localhost:3001
+```
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/logout` | Clears `ckx_token` cookie, redirects to sailor-client login |
+
+---
+
+## 15. Next Steps (Phase 3.5+)
 
 1. **Phase 3.5: Exam Types** - Add mock/full exam distinction
 2. **Phase 4: Payments** - Stripe integration for access passes

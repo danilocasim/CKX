@@ -99,168 +99,31 @@ DELETE /api/v1/sessions/:id          → Terminate session
 
 ## Active Phases
 
-### Phase 3: User Authentication & Accounts 🔄
+### Phase 3: User Authentication & Accounts ✅
 
 **Goal**: Enable user registration, authentication, and exam history tracking.
 
-**Duration**: 3-4 weeks
+**Status**: Complete
 
-#### 3.1 Database Setup
+**Deliverables**:
+- [x] PostgreSQL service with migrations
+- [x] User registration and login (JWT-based)
+- [x] Protected API routes
+- [x] Sailor-client React UI integrated
+- [x] CKX webapp auth protection (redirects to login if unauthenticated)
+- [x] Logout sync between sailor-client and CKX
 
-Add PostgreSQL service to the stack:
-
-```yaml
-# docker-compose.yaml addition
-postgres:
-  image: postgres:15-alpine
-  environment:
-    POSTGRES_DB: ckx
-    POSTGRES_USER: ckx
-    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  volumes:
-    - postgres_data:/var/lib/postgresql/data
-  networks:
-    - ckx-network
-```
-
-**Schema**:
-
-```sql
--- Users table
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  display_name VARCHAR(100),
-  email_verified BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Exam attempts (links users to CKX sessions)
-CREATE TABLE exam_attempts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  ckx_session_id UUID NOT NULL,
-  lab_id VARCHAR(50) NOT NULL,
-  category VARCHAR(20) NOT NULL,
-  status VARCHAR(20) NOT NULL,
-  score INTEGER,
-  max_score INTEGER,
-  started_at TIMESTAMP DEFAULT NOW(),
-  completed_at TIMESTAMP,
-  duration_minutes INTEGER
-);
-
--- Indexes
-CREATE INDEX idx_exam_attempts_user_id ON exam_attempts(user_id);
-CREATE INDEX idx_exam_attempts_status ON exam_attempts(status);
-```
-
-#### 3.2 Authentication Service
-
-**Technology**:
-- `pg` - PostgreSQL client
-- `bcrypt` - Password hashing (cost factor 12)
-- `jsonwebtoken` - JWT tokens (access: 15min, refresh: 7d)
-
-**Endpoints**:
-
-```
-POST   /api/v1/auth/register         → Create account
-POST   /api/v1/auth/login            → Get JWT tokens
-POST   /api/v1/auth/refresh          → Refresh access token
-POST   /api/v1/auth/logout           → Revoke refresh token
-GET    /api/v1/users/me              → Get current user
-GET    /api/v1/users/me/exams        → Get exam history
-```
-
-#### 3.3 Exam Types: Mock vs Full
-
-Labs are categorized into two types for access control:
-
-```javascript
-// labs.json structure update
-{
-  "labs": [
-    {
-      "id": "ckad-mock-001",
-      "name": "CKAD Sample Exam",
-      "category": "ckad",
-      "type": "mock",           // FREE - available to all users
-      "questionCount": 5,       // Limited questions
-      "duration": 30            // 30 minutes
-    },
-    {
-      "id": "ckad-full-001",
-      "name": "CKAD Practice Exam 1",
-      "category": "ckad",
-      "type": "full",           // PAID - requires active access pass
-      "questionCount": 17,      // Full exam
-      "duration": 120           // 2 hours
-    }
-  ]
-}
-```
-
-**Exam Type Definitions**:
-
-| Type | Access | Questions | Purpose |
-|------|--------|-----------|---------|
-| `mock` | Free (no signup required) | 3-5 questions | Try before you buy |
-| `full` | Requires active access pass | 15-20 questions | Real exam simulation |
-
-#### 3.4 Integration with Exam Flow
-
-Modify exam creation to check access:
-
-```javascript
-// examService.js modification
-async function createExam(examData, userId) {
-  const lab = await getLab(examData.labId);
-  
-  // Mock exams are free for everyone
-  if (lab.type === 'mock') {
-    return await createExamSession(examData, userId);
-  }
-  
-  // Full exams require active access pass
-  const access = await checkUserAccess(userId);
-  if (!access.hasValidPass) {
-    throw new AccessDeniedError('Active access pass required for full exams');
-  }
-  
-  const examId = uuidv4();
-  
-  // Create exam attempt record
-  await db.query(
-    'INSERT INTO exam_attempts (user_id, ckx_session_id, lab_id, category, exam_type, status) VALUES ($1, $2, $3, $4, $5, $6)',
-    [userId, examId, examData.labId, examData.category, lab.type, 'started']
-  );
-  
-  // Continue with existing exam creation...
-}
-```
-
-#### 3.5 Exit Criteria
-
-- [ ] User can register with email/password
-- [ ] User can login and receive JWT tokens
-- [ ] Protected routes require valid token
-- [ ] Mock exams accessible without payment
-- [ ] Full exams blocked without valid access pass
-- [ ] Exam attempts are linked to user accounts
-- [ ] User can view their exam history
+**Reference**: See `PHASE3_AUTH.md` for details.
 
 ---
 
-### Phase 3.5: Exam Content Restructuring ⏳
+### Phase 3.5: Exam Content Restructuring 🔄
 
 **Goal**: Create mock exams for free trial and restructure existing exams with type classification.
 
-**Duration**: 1-2 weeks
+**Status**: Next
 
-**Depends on**: Phase 3 complete (auth needed to test access control)
+**Depends on**: Phase 3 complete ✅
 
 #### 3.5.1 Content Strategy
 
