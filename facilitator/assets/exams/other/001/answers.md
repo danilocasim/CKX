@@ -5,6 +5,7 @@
 **Task**: Create a Docker image named `docker-speedrun:v1` using the provided Dockerfile and tag it as `docker-speedrun:latest`.
 
 **Solution**:
+
 ```bash
 # Navigate to the directory containing the Dockerfile
 cd /tmp/exam/q1
@@ -24,6 +25,7 @@ docker images | grep docker-speedrun
 **Task**: Run a container using nginx:alpine with specific parameters.
 
 **Solution**:
+
 ```bash
 docker run -d --name web-server -p 8080:80 -e NGINX_HOST=localhost nginx:alpine
 
@@ -39,6 +41,7 @@ docker exec web-server env | grep NGINX_HOST
 **Task**: Create a Docker volume and use it in a container to persist data.
 
 **Solution**:
+
 ```bash
 # Create the volume
 docker volume create data-volume
@@ -55,6 +58,7 @@ docker run --rm -v data-volume:/app/data alpine:latest cat /app/data/test.txt
 **Task**: Create a multi-stage Dockerfile to build a Go application with a minimal final image.
 
 **Solution**:
+
 ```
 FROM golang:1.17-alpine AS builder
 WORKDIR /app
@@ -68,6 +72,7 @@ ENTRYPOINT ["./app"]
 ```
 
 Build command:
+
 ```bash
 cd /tmp/exam/q4
 docker build -t multi-stage:latest .
@@ -78,6 +83,7 @@ docker build -t multi-stage:latest .
 **Task**: Configure the Docker daemon to use the systemd cgroup driver.
 
 **Solution**:
+
 ```bash
 # Create or edit the daemon.json file
 cat > /etc/docker/daemon.json << EOF
@@ -103,6 +109,7 @@ docker info | grep -i cgroup
 **Task**: Run a container with specific logging configuration.
 
 **Solution**:
+
 ```bash
 docker run -d --name logging-test \
   --log-driver json-file \
@@ -119,6 +126,7 @@ docker inspect logging-test --format '{{.HostConfig.LogConfig}}'
 **Task**: Create a custom bridge network and test container DNS resolution.
 
 **Solution**:
+
 ```bash
 # Create the custom network
 docker network create --subnet=172.18.0.0/16 app-network
@@ -138,6 +146,7 @@ docker network inspect app-network
 **Task**: Create a Dockerfile with healthcheck for a web application.
 
 **Solution**:
+
 ```
 FROM nginx:alpine
 
@@ -154,6 +163,7 @@ CMD ["nginx", "-g", "daemon off;"]
 ```
 
 Build and run command:
+
 ```bash
 cd /tmp/exam/q8
 docker build -t healthy-nginx .
@@ -168,6 +178,7 @@ docker inspect --format='{{.State.Health.Status}}' healthy-app
 **Task**: Pull and analyze an image manifest.
 
 **Solution**:
+
 ```bash
 # Pull the image
 docker pull nginx:1.21.0
@@ -185,6 +196,7 @@ cat /tmp/exam/q9/manifest.json | grep -A 10 "platform" | grep "architecture\|os"
 **Task**: Run a container with CPU and memory limits.
 
 **Solution**:
+
 ```bash
 docker run -d --name limited-resources \
   --cpus=0.5 \
@@ -201,6 +213,7 @@ docker inspect limited-resources --format '{{.HostConfig.Memory}}'
 **Task**: Create a Docker Compose file for a web and database application.
 
 **Solution**:
+
 ```yaml
 version: '3'
 
@@ -208,7 +221,7 @@ services:
   web:
     image: nginx:alpine
     ports:
-      - "8080:80"
+      - '8080:80'
     networks:
       - app-network
     depends_on:
@@ -234,6 +247,7 @@ volumes:
 ```
 
 Start services:
+
 ```bash
 cd /tmp/exam/q11
 docker-compose up -d
@@ -244,6 +258,7 @@ docker-compose up -d
 **Task**: Analyze and report on an existing Docker image.
 
 **Solution**:
+
 ```bash
 mkdir -p /tmp/exam/q12
 
@@ -265,6 +280,7 @@ EOF
 **Task**: Fix an issue with a broken container.
 
 **Solution**:
+
 ```bash
 mkdir -p /tmp/exam/q13
 
@@ -290,6 +306,7 @@ EOF
 **Task**: Create a Dockerfile that runs as a non-root user for improved security.
 
 **Solution**:
+
 ```
 FROM python:3.9-slim
 
@@ -313,6 +330,7 @@ ENTRYPOINT ["python", "app.py"]
 ```
 
 Build and run:
+
 ```bash
 cd /tmp/exam/q14
 docker build -t secure-app .
@@ -329,6 +347,7 @@ docker exec secure-app whoami
 **Solution**:
 
 Creating a .dockerignore file:
+
 ```
 .git
 node_modules
@@ -340,6 +359,7 @@ Dockerfile
 ```
 
 Optimized Dockerfile:
+
 ```
 FROM node:14-alpine
 
@@ -370,6 +390,7 @@ CMD ["node", "src/index.js"]
 ```
 
 Build command:
+
 ```bash
 cd /tmp/exam/q15
 docker build -t optimized-app:latest .
@@ -380,6 +401,7 @@ docker build -t optimized-app:latest .
 **Task**: Configure and use Docker Content Trust for image signing.
 
 **Solution**:
+
 ```bash
 # Commands saved to file
 cat > /tmp/exam/q16/dct-commands.sh << EOF
@@ -401,4 +423,4 @@ EOF
 
 # Make the file executable
 chmod +x /tmp/exam/q16/dct-commands.sh
-``` 
+```
