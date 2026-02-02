@@ -45,17 +45,20 @@ ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null candidate@k8s-ap
 #Pull assets from URL
 curl facilitator:3000/api/v1/exams/$EXAM_ID/assets -o assets.tar.gz
 
-mkdir -p /tmp/exam-assets
+# Use session-specific assets directory for multi-session support
+EXAM_ASSETS_DIR="/tmp/exam-assets-${EXAM_ID}"
+
+mkdir -p "$EXAM_ASSETS_DIR"
 #Unzip assets
-tar -xzvf assets.tar.gz -C /tmp/exam-assets    
+tar -xzvf assets.tar.gz -C "$EXAM_ASSETS_DIR"    
 
 #Remove assets.tar.gz
 rm assets.tar.gz
 
-#make every file in /tmp/exam-assets executable
-find /tmp/exam-assets -type f -exec chmod +x {} \;
+#make every file in exam assets dir executable
+find "$EXAM_ASSETS_DIR" -type f -exec chmod +x {} \;
 
-echo "Exam assets downloaded and prepared successfully" 
+echo "Exam assets downloaded and prepared successfully to $EXAM_ASSETS_DIR" 
 
 export KUBECONFIG=/home/candidate/.kube/kubeconfig
 
@@ -72,7 +75,7 @@ done
 echo "API server is ready"
 
 #Run setup scripts
-for script in /tmp/exam-assets/scripts/setup/q*_setup.sh; do $script; done
+for script in "$EXAM_ASSETS_DIR"/scripts/setup/q*_setup.sh; do $script; done
 
 log "Exam environment preparation completed successfully"
 exit 0 

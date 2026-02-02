@@ -6,9 +6,12 @@ exec >> /proc/1/fd/1 2>&1
 # This script cleans up the exam environment on the jumphost.
 # It removes all resources created during the exam to prepare for a new exam.
 #
-# Usage: cleanup-exam-env.sh
+# Usage: cleanup-exam-env.sh [EXAM_ID]
 #
-# Example: cleanup-exam-env.sh
+# Example: cleanup-exam-env.sh abc-123-def
+
+# Get exam ID from argument (for session-specific cleanup)
+EXAM_ID=${1:-""}
 
 # Log function with timestamp
 log() {
@@ -30,9 +33,14 @@ log "Removing exam environment directory"
 rm -rf /tmp/exam-env
 rm -rf /tmp/exam
 
-# Remove the exam assets directory
+# Remove the exam assets directory (session-specific if EXAM_ID provided)
 log "Removing exam assets directory"
-rm -rf /tmp/exam-assets
+if [ -n "$EXAM_ID" ]; then
+  rm -rf "/tmp/exam-assets-${EXAM_ID}"
+else
+  # Fallback: remove all exam-assets directories
+  rm -rf /tmp/exam-assets*
+fi
 
 log "Exam environment cleanup completed successfully"
 exit 0 
