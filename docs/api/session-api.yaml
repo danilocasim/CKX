@@ -1,0 +1,637 @@
+openapi: 3.0.3
+info:
+  title: CKX Session Management API
+  description: |
+    RESTful API for managing exam sessions in the CK-X Simulator.
+
+    ## Session Lifecycle
+
+    ```
+    INITIALIZING → ALLOCATING_PORTS → CONFIGURING → READY → ACTIVE → TERMINATING → TERMINATED
+         ↓              ↓                 ↓            ↓        ↓           ↓
+       FAILED        FAILED            FAILED      FAILED   FAILED      FAILED
+    ```
+
+    ## Modes
+
+    - **SHARED**: All sessions use common containers (default)
+    - **ISOLATED**: Each session gets dedicated containers (future)
+
+  version: 1.0.0
+  contact:
+    name: CK-X Simulator
+    url: https://github.com/ckx-simulator
+
+servers:
+  - url: http://localhost:30080/facilitator/api/v1
+    description: Local development (via nginx proxy)
+  - url: http://localhost:3000/api/v1
+    description: Direct facilitator access
+
+paths:
+  /sessions:
+    post:
+      summary: Create a new session
+      description: |
+        Initializes a new session with port allocation.
+        Returns session details including allocated ports.
+      operationId: createSession
+      tags:
+        - Sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+            example:
+              sessionId: '550e8400-e29b-41d4-a716-446655440000'
+              options:
+                labId: 'ckad-pod-design'
+      responses:
+        '201':
+          description: Session created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Session already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    get:
+      summary: List all sessions
+      description: Returns a list of all active sessions with optional state filtering.
+      operationId: listSessions
+      tags:
+        - Sessions
+      parameters:
+        - name: state
+          in: query
+          description: Filter by session state
+          schema:
+            type: string
+            enum:
+              [
+                INITIALIZING,
+                ALLOCATING_PORTS,
+                CONFIGURING,
+                READY,
+                ACTIVE,
+                TERMINATING,
+                TERMINATED,
+                FAILED,
+              ]
+      responses:
+        '200':
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/stats:
+    get:
+      summary: Get session statistics
+      description: Returns statistics about sessions and port allocations.
+      operationId: getSessionStats
+      tags:
+        - Sessions
+      responses:
+        '200':
+          description: Session statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/{sessionId}:
+    get:
+      summary: Get session metadata
+      description: Returns full metadata for a specific session.
+      operationId: getSession
+      tags:
+        - Sessions
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDetailResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      summary: Terminate a session
+      description: |
+        Terminates the session and releases all allocated resources.
+        Ports are released immediately; session data is retained briefly for debugging.
+      operationId: terminateSession
+      tags:
+        - Sessions
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session terminated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/{sessionId}/status:
+    get:
+      summary: Get session status
+      description: Returns the current status and state timestamps for a session.
+      operationId: getSessionStatus
+      tags:
+        - Sessions
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/{sessionId}/routing:
+    get:
+      summary: Get session routing information
+      description: |
+        Returns connection details for session resources (VNC, SSH, K8s API).
+        Used by the webapp to route client connections to the correct endpoints.
+      operationId: getSessionRouting
+      tags:
+        - Sessions
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Routing information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/{sessionId}/ports:
+    get:
+      summary: Get allocated ports
+      description: Returns the ports allocated to a specific session.
+      operationId: getSessionPorts
+      tags:
+        - Sessions
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Allocated ports
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/{sessionId}/activate:
+    post:
+      summary: Activate a session
+      description: |
+        Marks a session as active (in-use).
+        Session must be in READY state to be activated.
+      operationId: activateSession
+      tags:
+        - Sessions
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session activated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  parameters:
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      description: Session UUID
+      schema:
+        type: string
+        format: uuid
+        example: '550e8400-e29b-41d4-a716-446655440000'
+
+  schemas:
+    CreateSessionRequest:
+      type: object
+      required:
+        - sessionId
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          description: Unique session identifier (UUID)
+        options:
+          type: object
+          properties:
+            labId:
+              type: string
+              description: Associated lab ID
+            userId:
+              type: string
+              description: User identifier
+            metadata:
+              type: object
+              description: Additional metadata
+
+    SessionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            sessionId:
+              type: string
+              format: uuid
+            state:
+              $ref: '#/components/schemas/SessionState'
+            mode:
+              $ref: '#/components/schemas/SessionMode'
+            ports:
+              $ref: '#/components/schemas/PortAllocation'
+            createdAt:
+              type: string
+              format: date-time
+
+    SessionListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            count:
+              type: integer
+              example: 2
+            sessions:
+              type: array
+              items:
+                type: object
+                properties:
+                  sessionId:
+                    type: string
+                    format: uuid
+                  state:
+                    $ref: '#/components/schemas/SessionState'
+                  mode:
+                    $ref: '#/components/schemas/SessionMode'
+                  createdAt:
+                    type: string
+                    format: date-time
+                  updatedAt:
+                    type: string
+                    format: date-time
+
+    SessionDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            state:
+              $ref: '#/components/schemas/SessionState'
+            mode:
+              $ref: '#/components/schemas/SessionMode'
+            ports:
+              $ref: '#/components/schemas/PortAllocation'
+            containers:
+              type: object
+            options:
+              type: object
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            activatedAt:
+              type: string
+              format: date-time
+              nullable: true
+            terminatedAt:
+              type: string
+              format: date-time
+              nullable: true
+            error:
+              type: string
+              nullable: true
+
+    StatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            sessionId:
+              type: string
+              format: uuid
+            state:
+              $ref: '#/components/schemas/SessionState'
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            activatedAt:
+              type: string
+              format: date-time
+              nullable: true
+            terminatedAt:
+              type: string
+              format: date-time
+              nullable: true
+            error:
+              type: string
+              nullable: true
+
+    RoutingResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            sessionId:
+              type: string
+              format: uuid
+            mode:
+              $ref: '#/components/schemas/SessionMode'
+            vnc:
+              $ref: '#/components/schemas/ServiceEndpoint'
+            ssh:
+              $ref: '#/components/schemas/ServiceEndpoint'
+            jumphost:
+              $ref: '#/components/schemas/ServiceEndpoint'
+            k8sApi:
+              $ref: '#/components/schemas/ServiceEndpoint'
+
+    PortsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/PortAllocation'
+
+    TerminateResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            sessionId:
+              type: string
+              format: uuid
+            message:
+              type: string
+              example: 'Session terminated successfully'
+
+    ActivateResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            sessionId:
+              type: string
+              format: uuid
+            state:
+              type: string
+              example: 'ACTIVE'
+            activatedAt:
+              type: string
+              format: date-time
+
+    StatsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            mode:
+              $ref: '#/components/schemas/SessionMode'
+            totalSessions:
+              type: integer
+              example: 5
+            sessionsByState:
+              type: object
+              additionalProperties:
+                type: integer
+              example:
+                READY: 2
+                ACTIVE: 3
+            ports:
+              type: object
+              properties:
+                VNC:
+                  $ref: '#/components/schemas/PortStats'
+                SSH_TERMINAL:
+                  $ref: '#/components/schemas/PortStats'
+                SSH_JUMPHOST:
+                  $ref: '#/components/schemas/PortStats'
+                K8S_API:
+                  $ref: '#/components/schemas/PortStats'
+            maxSessions:
+              type: integer
+              example: 99
+
+    SessionState:
+      type: string
+      enum:
+        - INITIALIZING
+        - ALLOCATING_PORTS
+        - SPAWNING_CONTAINERS
+        - CONFIGURING
+        - READY
+        - ACTIVE
+        - TERMINATING
+        - TERMINATED
+        - FAILED
+
+    SessionMode:
+      type: string
+      enum:
+        - SHARED
+        - ISOLATED
+
+    PortAllocation:
+      type: object
+      properties:
+        vnc:
+          type: integer
+          example: 6901
+        sshTerminal:
+          type: integer
+          example: 2201
+        sshJumphost:
+          type: integer
+          example: 2301
+        k8sApi:
+          type: integer
+          example: 6443
+
+    ServiceEndpoint:
+      type: object
+      properties:
+        host:
+          type: string
+          example: 'remote-desktop'
+        port:
+          type: integer
+          example: 6901
+        allocatedPort:
+          type: integer
+          example: 6902
+          nullable: true
+
+    PortStats:
+      type: object
+      properties:
+        allocated:
+          type: integer
+          example: 5
+        available:
+          type: integer
+          example: 94
+        total:
+          type: integer
+          example: 99
+        range:
+          type: string
+          example: '6901-6999'
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: 'Not Found'
+        message:
+          type: string
+          example: 'Session 550e8400-e29b-41d4-a716-446655440000 not found'
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: 'Validation Error'
+            message: 'sessionId must be a valid UUID'
+
+    NotFound:
+      description: Session not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: 'Not Found'
+            message: 'Session 550e8400-e29b-41d4-a716-446655440000 not found'
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: 'Internal Server Error'
+            message: 'An unexpected error occurred'
+
+tags:
+  - name: Sessions
+    description: Session lifecycle management
