@@ -174,22 +174,25 @@ async function terminateSession(sessionId) {
     // Cleanup session resources
     await cleanupSession(sessionId, sessionInfo);
 
-    // Mark as terminated
-    sessionInfo.state = SESSION_STATES.TERMINATED;
-    sessionInfo.terminatedAt = new Date().toISOString();
-    sessionInfo.updatedAt = new Date().toISOString();
-    await persistSessionInfo(sessionId, sessionInfo);
+    // Delete session data immediately (no delay)
+    await deleteSessionInfo(sessionId);
 
-    // Remove session data after short delay (for debugging)
-    setTimeout(async () => {
-      try {
-        await deleteSessionInfo(sessionId);
-      } catch (e) {
-        logger.warn(`Failed to delete session info for ${sessionId}:`, e);
+    // Also cleanup exam data from Redis
+    try {
+      const client = await redisClient.getClient();
+      // Delete all exam-related keys for this session
+      const examKeys = await client.keys(`exam:${sessionId}:*`);
+      if (examKeys.length > 0) {
+        await client.del(examKeys);
+        logger.debug(`Deleted ${examKeys.length} exam keys for session ${sessionId}`);
       }
-    }, 60000); // Keep for 1 minute for debugging
+      // Also try the direct exam key
+      await client.del(`exam:${sessionId}`);
+    } catch (e) {
+      logger.warn(`Failed to cleanup exam data for ${sessionId}:`, e);
+    }
 
-    logger.info(`Session ${sessionId} terminated`);
+    logger.info(`Session ${sessionId} terminated and deleted`);
 
   } catch (error) {
     logger.error(`Error terminating session ${sessionId}:`, error);
