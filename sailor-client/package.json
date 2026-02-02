@@ -1,0 +1,17 @@
+{
+  "name": "sailor-client",
+  "version": "1.0.0",
+  "description": "CKX Authentication UI - React client connecting to facilitator API",
+  "private": true,
+  "workspaces": [
+    "client"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=client",
+    "preview": "npm run preview --workspace=client"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

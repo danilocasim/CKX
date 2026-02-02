@@ -5,6 +5,7 @@ const cors = require('cors');
 const config = require('./config');
 const logger = require('./utils/logger');
 const redisClient = require('./utils/redisClient');
+const db = require('./utils/db');
 
 // Import routes
 const sshRoutes = require('./routes/sshRoutes');
@@ -12,6 +13,8 @@ const examRoutes = require('./routes/examRoutes');
 const assessmentRoutes = require('./routes/assessmentRoutes');
 const remoteDesktopRoutes = require('./routes/remoteDesktopRoutes');
 const sessionRoutes = require('./routes/sessionRoutes');
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 // Import services for initialization
 const portAllocator = require('./services/portAllocator');
@@ -38,6 +41,8 @@ app.use('/api/v1/exams', examRoutes);
 app.use('/api/v1/sessions', sessionRoutes);
 app.use('/api/v1/assements', assessmentRoutes);
 app.use('/api/v1/remote-desktop', remoteDesktopRoutes);
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/users', userRoutes);
 
 // Root route
 app.get('/', (req, res) => {
@@ -74,6 +79,14 @@ app.use((err, req, res, next) => {
     // Initialize port allocator with Redis client
     await portAllocator.initialize(redisClient);
     logger.info('Port allocator initialized');
+
+    // Test database connection
+    const dbConnected = await db.testConnection();
+    if (dbConnected) {
+      logger.info('PostgreSQL connected successfully');
+    } else {
+      logger.warn('PostgreSQL connection failed - auth features may not work');
+    }
   } catch (error) {
     logger.error(`Initialization failed: ${error.message}`);
   }

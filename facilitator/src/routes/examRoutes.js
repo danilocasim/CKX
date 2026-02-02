@@ -5,6 +5,13 @@ const { validateCreateExam, validateEvaluateExam, validateExamEvents } = require
 const router = express.Router();
 
 /**
+ * @route GET /api/v1/exams/labs
+ * @desc Get list of available labs
+ * @access Public
+ */
+router.get('/labs', examController.getLabsList);
+
+/**
  * @route POST /api/v1/exams
  * @desc Create a new exam
  * @access Public

@@ -6,6 +6,38 @@ const redisClient = require('../utils/redisClient');
 const MetricService = require('../services/metricService');
 
 /**
+ * Get list of available labs
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+async function getLabsList(req, res) {
+  try {
+    const labsPath = path.join(__dirname, '../../assets/exams/labs.json');
+    const labsData = JSON.parse(fs.readFileSync(labsPath, 'utf8'));
+    
+    // Transform labs for client
+    const labs = labsData.labs.map(lab => ({
+      id: lab.id,
+      name: lab.name,
+      category: lab.category,
+      description: lab.description,
+      difficulty: lab.difficulty,
+      duration: lab.examDurationInMinutes || 120,
+      type: lab.type || 'full',
+    }));
+
+    return res.json({ success: true, labs });
+  } catch (error) {
+    logger.error('Failed to get labs list', { error: error.message });
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Failed to load labs',
+      message: error.message 
+    });
+  }
+}
+
+/**
  * Create a new exam
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
@@ -13,7 +45,37 @@ const MetricService = require('../services/metricService');
 async function createExam(req, res) {
   logger.info('Received request to create a new exam', { examData: req.body });
   
-  const result = await examService.createExam(req.body);
+  let examData = req.body;
+
+  // If only labId is provided, look up the full lab data from labs.json
+  if (examData.labId && !examData.assetPath) {
+    try {
+      const labsPath = path.join(__dirname, '../../assets/exams/labs.json');
+      const labsData = JSON.parse(fs.readFileSync(labsPath, 'utf8'));
+      const lab = labsData.labs.find(l => l.id === examData.labId);
+      
+      if (!lab) {
+        return res.status(404).json({
+          error: 'Lab not found',
+          message: `Lab with id "${examData.labId}" not found`
+        });
+      }
+
+      // Merge lab data with request data
+      examData = {
+        ...lab,
+        ...examData,
+      };
+    } catch (error) {
+      logger.error('Failed to load lab data', { error: error.message });
+      return res.status(500).json({
+        error: 'Failed to load lab',
+        message: error.message
+      });
+    }
+  }
+
+  const result = await examService.createExam(examData);
   
   if (!result.success) {
     // Handle the specific case of an exam already existing
@@ -402,6 +464,7 @@ async function submitMetrics(req, res) {
 }
 
 module.exports = {
+  getLabsList,
   createExam,
   getCurrentExam,
   getExamAssets,
