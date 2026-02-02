@@ -40,6 +40,12 @@ class AuthService {
                 return next();
             }
 
+            // Logout endpoint - clear cookie and redirect to sailor-client
+            if (req.path === '/logout') {
+                res.clearCookie('ckx_token');
+                return res.redirect(`${SAILOR_CLIENT_URL}/login`);
+            }
+
             // Check for token in query param (from sailor-client redirect)
             const queryToken = req.query.token;
             if (queryToken) {

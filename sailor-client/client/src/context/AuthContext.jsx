@@ -63,6 +63,13 @@ export function AuthProvider({ children }) {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       setUser(null);
+      
+      // Clear CKX session cookie by loading logout endpoint in hidden iframe
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = 'http://localhost:30080/logout';
+      document.body.appendChild(iframe);
+      setTimeout(() => iframe.remove(), 1000);
     }
   };
 
