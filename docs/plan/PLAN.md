@@ -26,9 +26,10 @@ This document outlines the complete technical roadmap for transforming CKX from 
 | 1 | Session Isolation Foundation | ✅ Complete | Redis changes, port allocation, session-specific paths |
 | 1.5 | Session Management Integration | ✅ Complete | Port allocator + exam lifecycle integration |
 | 2 | Session Management API | ✅ Complete | REST API for session operations |
-| 3 | User Authentication | ✅ Complete | PostgreSQL, JWT auth, user accounts |
+| 3 | User Authentication | ✅ Complete | PostgreSQL, JWT auth, user accounts, CKX webapp protection |
 | 3.5 | Exam Content Restructuring | 🔄 **Next** | Create mock exams for free trial, add type field |
-| 4 | Payment Integration | ⏳ Pending | Stripe one-time payments, access passes |
+| 4 | Payment MVP | ⏳ Planned | Mock payment flow, countdown timer, access validation |
+| 4.5 | Stripe Integration | ⏳ Pending | Real payment processing |
 | 5 | Production Deployment | ⏳ Pending | AWS infrastructure, CI/CD |
 | 6 | Scaling & Performance | ⏳ Pending | Cluster pooling, auto-scaling |
 | 7 | Enterprise Features | ⏳ Pending | SSO, teams, LMS integration |
@@ -312,11 +313,23 @@ For each mock exam, select questions that:
 
 **Goal**: Monetize with time-based access passes (not subscriptions).
 
-**Duration**: 2-3 weeks
+**Status**: Planning Complete - MVP Ready
 
 **Depends on**: Phase 3.5 complete (exam types must exist)
 
-#### 4.1 Pricing Model (Time-Based Access Passes)
+**Reference**: See `PHASE4_PAYMENT_MVP.md` for detailed MVP implementation plan with security analysis.
+
+#### 4.1 MVP Approach (Validate Before Stripe)
+
+Before integrating real payments, we implement a mock payment flow to validate:
+1. **Access pass flow** - Button click grants access (no real payment)
+2. **Countdown timer** - Display remaining time to user  
+3. **Server-side validation** - All access checks on server (security)
+4. **Expiry handling** - Redirect to pricing when access expires
+
+> ⚠️ **Security Principle**: Never trust the client. Countdown is cosmetic; server validates on every request.
+
+#### 4.2 Pricing Model (Time-Based Access Passes)
 
 | Plan | Price | Duration | Features |
 |------|-------|----------|----------|
