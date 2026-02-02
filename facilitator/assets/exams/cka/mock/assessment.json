@@ -1,0 +1,154 @@
+{
+  "questions": [
+    {
+      "id": "1",
+      "namespace": "app-team1",
+      "machineHostname": "ckad9999",
+      "question": "Create a pod named `nginx-pod` using the `nginx:1.19` image.\n\nEnsure the pod is created in the `app-team1` namespace and has the label `run=nginx-pod`.\n\nVerify that the pod is in the Running state.",
+      "concepts": ["pods", "labels", "namespaces"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "Pod exists in correct namespace",
+          "verificationScriptFile": "q1_s1_validate_namespace.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "2",
+          "description": "Pod has correct image",
+          "verificationScriptFile": "q1_s2_validate_pod.sh",
+          "expectedOutput": "0",
+          "weightage": 1
+        },
+        {
+          "id": "3",
+          "description": "Pod has correct status and configuration",
+          "verificationScriptFile": "q1_s3_validate_pod_status.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "namespace": "default",
+      "machineHostname": "ckad9999",
+      "question": "Create a ConfigMap named `app-config` with the key `APP_COLOR` and value `blue`.\n\nCreate a pod named `config-pod` using the `nginx` image that mounts this ConfigMap as a volume named `config-volume` at `/etc/config`.\n\nVerify that the configuration is correctly accessible within the pod.",
+      "concepts": ["configmaps", "volumes", "pod configuration"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "ConfigMap and pod exist",
+          "verificationScriptFile": "q2_s1_validate_configmap.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "2",
+          "description": "ConfigMap has correct data",
+          "verificationScriptFile": "q2_s2_validate_pod.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "3",
+          "description": "ConfigMap usage and mounting are correct",
+          "verificationScriptFile": "q2_s3_validate_configmap_usage.sh",
+          "expectedOutput": "0",
+          "weightage": 3
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "namespace": "storage-task",
+      "machineHostname": "ckad9999",
+      "question": "Create a Dynamic PVC named `data-pvc` with the following specifications:\n\n- Storage Class: `standard`\n- Access Mode: `ReadWriteOnce`\n- Storage Request: `2Gi`\n\nThen create a Pod named `data-pod` using the `nginx` image that mounts this PVC as volume with name `data` at `/usr/share/nginx/html`.\n\nEnsure both the PVC and Pod are in the `storage-task` namespace.",
+      "concepts": ["storage", "persistent-volumes", "pods"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "PVC exists with correct specifications",
+          "verificationScriptFile": "q3_s1_validate_pvc.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "2",
+          "description": "Pod exists and is running",
+          "verificationScriptFile": "q3_s2_validate_pod.sh",
+          "expectedOutput": "0",
+          "weightage": 1
+        },
+        {
+          "id": "3",
+          "description": "PVC is correctly mounted in the pod",
+          "verificationScriptFile": "q3_s3_validate_mount.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "namespace": "scaling",
+      "machineHostname": "ckad9999",
+      "question": "Create a Deployment named `scaling-app` with the following specifications:\n\n- Image: `nginx`\n- Initial replicas: `2`\n- Resource requests: CPU: `200m`, Memory: `256Mi`\n- Resource limits: CPU: `500m`, Memory: `512Mi`\n\nThen create a `HorizontalPodAutoscaler` for this deployment:\n- Use apiVersion: `autoscaling/v1`\n- Min replicas: `2`\n- Max replicas: `5`\n- Target CPU utilization: `70%`",
+      "concepts": ["autoscaling", "deployments", "resource-management"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "Deployment exists with correct specifications",
+          "verificationScriptFile": "q4_s1_validate_deployment.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "2",
+          "description": "HPA exists with correct specifications",
+          "verificationScriptFile": "q4_s2_validate_hpa.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "3",
+          "description": "Deployment has correct resource configurations",
+          "verificationScriptFile": "q4_s3_validate_resources.sh",
+          "expectedOutput": "0",
+          "weightage": 1
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "namespace": "helm-test",
+      "machineHostname": "ckad9999",
+      "question": "Using Helm:\n\n1. Add the bitnami repository `https://charts.bitnami.com/bitnami`\n2. Install the `nginx` chart from bitnami with release name `web-release` in namespace `helm-test`\n3. Configure the service type as `NodePort` and set the replica count to `2`\n4. Verify the deployment is successful and pods are running",
+      "concepts": ["helm", "package-management"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "Helm repository is added correctly",
+          "verificationScriptFile": "q5_s1_validate_repo.sh",
+          "expectedOutput": "0",
+          "weightage": 1
+        },
+        {
+          "id": "2",
+          "description": "Helm release is installed with correct configuration",
+          "verificationScriptFile": "q5_s2_validate_release.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "3",
+          "description": "Deployment is running with correct specifications",
+          "verificationScriptFile": "q5_s3_validate_deployment.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        }
+      ]
+    }
+  ]
+}

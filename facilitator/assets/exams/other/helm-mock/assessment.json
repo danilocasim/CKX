@@ -1,0 +1,66 @@
+{
+  "questions": [
+    {
+      "id": "1",
+      "namespace": "default",
+      "machineHostname": "ckad9999",
+      "question": "Add the Bitnami chart repository to your Helm configuration with the name `bitnami` and URL `https://charts.bitnami.com/bitnami`.\n\nUpdate the repository to fetch the latest chart information. Verify success by listing all repositories.",
+      "concepts": ["helm", "repositories"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "Bitnami repo is added",
+          "verificationScriptFile": "q1_s1_validate_repo_added.sh",
+          "expectedOutput": "0",
+          "weightage": 4
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "namespace": "default",
+      "machineHostname": "ckad9999",
+      "question": "Install the Bitnami nginx chart with the release name `web-server` in the `default` namespace.\n\nEnsure the service type is set to `NodePort` and the port is set to `30080`. Only modify the necessary values without changing other default settings.",
+      "concepts": ["helm", "chart installation", "value overrides"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "Nginx chart is installed as web-server",
+          "verificationScriptFile": "q2_s1_validate_nginx_installed.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "2",
+          "description": "Service type is NodePort with port 30080",
+          "verificationScriptFile": "q2_s2_validate_service_config.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "namespace": "default",
+      "machineHostname": "ckad9999",
+      "question": "Upgrade the `web-server` release to set replica count to 3.\n\nVerify the update was successful by checking the number of pods.",
+      "concepts": ["helm", "release upgrade"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "Release was upgraded",
+          "verificationScriptFile": "q3_s1_validate_upgrade.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "2",
+          "description": "Replica count is 3",
+          "verificationScriptFile": "q3_s2_validate_replicas.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        }
+      ]
+    }
+  ]
+}

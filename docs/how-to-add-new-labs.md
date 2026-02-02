@@ -224,7 +224,9 @@ Finally, add your lab to the main `labs.json` file:
       "category": "CKAD",
       "description": "Practice advanced deployment patterns and strategies",
       "warmUpTimeInSeconds": 60,
-      "difficulty": "medium"
+      "difficulty": "medium",
+      "type": "full",
+      "isFree": false
     }
   ]
 }
@@ -238,6 +240,8 @@ Parameters:
 - `description`: Brief description of the lab content
 - `warmUpTimeInSeconds`: Preparation time before exam starts
 - `difficulty`: Difficulty level (easy, medium, hard)
+- `type`: Lab type - `"full"` (requires authentication) or `"mock"` (available to all users)
+- `isFree`: Whether the lab is free to access (`true` for mock exams, `false` for full exams)
 
 ## Best Practices
 

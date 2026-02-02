@@ -1,0 +1,94 @@
+{
+  "questions": [
+    {
+      "id": "1",
+      "namespace": "network-security",
+      "machineHostname": "ckad9999",
+      "question": "Create a NetworkPolicy named `secure-backend` in the `network-security` namespace that restricts access to pods with label `app=backend` to only allow ingress traffic from pods with label `app=frontend` on port 8080.\n\nAdditionally, ensure that these backend pods can only make egress connections to pods with label `app=database` on port 5432.",
+      "concepts": ["network policies", "ingress", "egress"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "NetworkPolicy exists",
+          "verificationScriptFile": "q1_s1_validate_policy_exists.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "2",
+          "description": "NetworkPolicy has correct ingress rules",
+          "verificationScriptFile": "q1_s2_validate_ingress.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "3",
+          "description": "NetworkPolicy has correct egress rules",
+          "verificationScriptFile": "q1_s3_validate_egress.sh",
+          "expectedOutput": "0",
+          "weightage": 1
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "namespace": "rbac-minimize",
+      "machineHostname": "ckad9999",
+      "question": "Create a Role and RoleBinding in the `rbac-minimize` namespace to provide a ServiceAccount named `app-reader` with minimal permissions required to read pods, services, and deployments, but not secrets or configmaps.\n\nThe Role should be named `app-reader-role` and the RoleBinding should be named `app-reader-binding`.",
+      "concepts": ["rbac", "role", "rolebinding", "least privilege"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "Role exists",
+          "verificationScriptFile": "q2_s1_validate_role_exists.sh",
+          "expectedOutput": "0",
+          "weightage": 1
+        },
+        {
+          "id": "2",
+          "description": "Role has correct permissions",
+          "verificationScriptFile": "q2_s2_validate_role_permissions.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "3",
+          "description": "RoleBinding exists and is correct",
+          "verificationScriptFile": "q2_s3_validate_rolebinding.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "namespace": "pod-security",
+      "machineHostname": "ckad9999",
+      "question": "Label the `pod-security` namespace to enforce the `baseline` Pod Security Standard.\n\nThen, create a pod named `compliant-pod` that complies with the baseline Pod Security Standard.\n\nFinally, attempt to create a pod named `non-compliant-pod` that violates the standard by running as root and with privileged security context. Document the error in a file named `/tmp/violation.txt`.",
+      "concepts": ["pod security standards", "namespace labels"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "Namespace has correct labels",
+          "verificationScriptFile": "q3_s1_validate_namespace_labels.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "2",
+          "description": "Compliant pod exists",
+          "verificationScriptFile": "q3_s2_validate_compliant_pod.sh",
+          "expectedOutput": "0",
+          "weightage": 1
+        },
+        {
+          "id": "3",
+          "description": "Non-compliant pod is rejected",
+          "verificationScriptFile": "q3_s3_validate_non_compliant_pod.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        }
+      ]
+    }
+  ]
+}

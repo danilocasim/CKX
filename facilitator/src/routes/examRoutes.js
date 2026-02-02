@@ -1,22 +1,23 @@
 const express = require('express');
 const examController = require('../controllers/examController');
 const { validateCreateExam, validateEvaluateExam, validateExamEvents } = require('../middleware/validators');
+const { optionalAuth } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
 /**
  * @route GET /api/v1/exams/labs
  * @desc Get list of available labs
- * @access Public
+ * @access Public (mock exams) / Authenticated (full exams)
  */
-router.get('/labs', examController.getLabsList);
+router.get('/labs', optionalAuth, examController.getLabsList);
 
 /**
  * @route POST /api/v1/exams
  * @desc Create a new exam
- * @access Public
+ * @access Public (mock exams) / Authenticated (full exams)
  */
-router.post('/', validateCreateExam, examController.createExam);
+router.post('/', optionalAuth, validateCreateExam, examController.createExam);
 
 /**
  * @route GET /api/v1/exams/current

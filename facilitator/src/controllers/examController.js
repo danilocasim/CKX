@@ -14,9 +14,12 @@ async function getLabsList(req, res) {
   try {
     const labsPath = path.join(__dirname, '../../assets/exams/labs.json');
     const labsData = JSON.parse(fs.readFileSync(labsPath, 'utf8'));
-    
+
+    const { type, category } = req.query;
+    const isAuthenticated = !!req.userId;
+
     // Transform labs for client
-    const labs = labsData.labs.map(lab => ({
+    let labs = labsData.labs.map(lab => ({
       id: lab.id,
       name: lab.name,
       category: lab.category,
@@ -24,15 +27,33 @@ async function getLabsList(req, res) {
       difficulty: lab.difficulty,
       duration: lab.examDurationInMinutes || 120,
       type: lab.type || 'full',
+      isFree: lab.isFree || false,
     }));
+
+    // Filter by type if specified
+    if (type) {
+      labs = labs.filter(lab => lab.type === type);
+    }
+
+    // Filter by category if specified
+    if (category) {
+      labs = labs.filter(lab =>
+        lab.category.toLowerCase() === category.toLowerCase()
+      );
+    }
+
+    // Unauthenticated users only see mock exams
+    if (!isAuthenticated) {
+      labs = labs.filter(lab => lab.type === 'mock');
+    }
 
     return res.json({ success: true, labs });
   } catch (error) {
     logger.error('Failed to get labs list', { error: error.message });
-    return res.status(500).json({ 
-      success: false, 
+    return res.status(500).json({
+      success: false,
       error: 'Failed to load labs',
-      message: error.message 
+      message: error.message
     });
   }
 }
@@ -44,7 +65,7 @@ async function getLabsList(req, res) {
  */
 async function createExam(req, res) {
   logger.info('Received request to create a new exam', { examData: req.body });
-  
+
   let examData = req.body;
 
   // If only labId is provided, look up the full lab data from labs.json
@@ -53,11 +74,22 @@ async function createExam(req, res) {
       const labsPath = path.join(__dirname, '../../assets/exams/labs.json');
       const labsData = JSON.parse(fs.readFileSync(labsPath, 'utf8'));
       const lab = labsData.labs.find(l => l.id === examData.labId);
-      
+
       if (!lab) {
         return res.status(404).json({
           error: 'Lab not found',
           message: `Lab with id "${examData.labId}" not found`
+        });
+      }
+
+      // Check access control: full exams require authentication
+      const labType = lab.type || 'full';
+      const isAuthenticated = !!req.userId;
+
+      if (labType === 'full' && !isAuthenticated) {
+        return res.status(401).json({
+          error: 'Unauthorized',
+          message: 'Authentication required for full exams. Please login or try a mock exam.'
         });
       }
 

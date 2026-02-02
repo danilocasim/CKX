@@ -22,7 +22,7 @@ docker-compose logs -f <service-name>
 docker-compose exec <service-name> bash
 ```
 
-Services: `webapp`, `facilitator`, `remote-desktop`, `remote-terminal`, `jumphost`, `k8s-api-server`, `redis`, `nginx`
+Services: `webapp`, `facilitator`, `remote-desktop`, `remote-terminal`, `jumphost`, `k8s-api-server`, `redis`, `postgres`, `nginx`
 
 Access the application at http://localhost:30080 after startup.
 
@@ -51,7 +51,7 @@ No automated test suite is configured. When tests are added, run per-package: `c
 
 ## Architecture
 
-The system runs 8 containerized services orchestrated via Docker Compose:
+The system runs 9 containerized services orchestrated via Docker Compose:
 
 - **webapp** (port 3000) - Express.js web frontend (serves exam UI, VNC proxy, SSH terminal via xterm.js/Socket.io)
 - **facilitator** (port 3000) - Backend API for exam management, SSH execution, and solution evaluation
@@ -59,6 +59,7 @@ The system runs 8 containerized services orchestrated via Docker Compose:
 - **remote-terminal** / **jumphost** (port 22) - SSH access points for candidates
 - **k8s-api-server** (port 6443) - KIND Kubernetes cluster
 - **redis** (port 6379) - Session and state management
+- **postgres** (port 5432) - User authentication database
 - **nginx** (port 30080) - Reverse proxy (only externally exposed service)
 
 All services communicate internally via bridge network `ckx-network`. A shared volume `kube-config` passes cluster kubeconfig between jumphost and k8s-api-server.
@@ -122,6 +123,19 @@ Facilitator service (internal port 3000, accessed via `/facilitator` prefix thro
 
 ### SSH Execution
 - `POST /api/v1/execute` - Execute command on jumphost
+
+### Authentication (requires PostgreSQL)
+- `POST /api/v1/auth/register` - Register new user
+- `POST /api/v1/auth/login` - Login and get tokens
+- `POST /api/v1/auth/refresh` - Refresh access token
+- `POST /api/v1/auth/logout` - Logout (authenticated)
+
+### User Profile (authenticated)
+- `GET /api/v1/users/me` - Get current user profile
+- `PATCH /api/v1/users/me` - Update profile
+- `GET /api/v1/users/me/stats` - Get user statistics
+- `GET /api/v1/users/me/exams` - Get exam history
+- `GET /api/v1/users/me/exams/:id` - Get specific exam attempt
 
 ## Adding New Labs
 

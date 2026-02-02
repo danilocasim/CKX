@@ -1,0 +1,189 @@
+{
+    "questions": [
+        {
+            "id": "1",
+            "namespace": "dev",
+            "machineHostname": "ckad9999",
+            "question": "In this task, you need to set up a basic web application deployment. \n\nCreate a deployment called `nginx-deployment` in the namespace `dev` with `3` replicas using the image `nginx:latest`. \n\nEnsure that the namespace exists before creating the deployment. The deployment should maintain exactly 3 pods running at all times, and all pods should be using the specified nginx image version.",
+            "concepts": ["deployments", "namespaces", "replicas"],
+            "verification": [
+                {
+                    "id": "1",
+                    "description": "Namespace is created",
+                    "verificationScriptFile": "q1_s1_validate_namespace.sh",
+                    "expectedOutput": "0",
+                    "weightage": "1"
+                },
+                {
+                    "id": "2",
+                    "description": "Deployment is created",
+                    "verificationScriptFile": "q1_s2_validate_deployment.sh",
+                    "expectedOutput": "0",
+                    "weightage": 2
+                },
+                {
+                    "id": "3",
+                    "description": "Deployment is is using correct image nginx",
+                    "verificationScriptFile": "q1_s3_validate_deployment_running.sh",
+                    "expectedOutput": "0",
+                    "weightage": 2
+                },
+                {
+                    "id": "4",
+                    "description": "Deployment has 3 replicas",
+                    "verificationScriptFile": "q1_s4_validate_deployment_replicas.sh",
+                    "expectedOutput": "0",
+                    "weightage": 2
+                }
+            ]
+        },
+        {
+            "id": "2",
+            "namespace": "workloads",
+            "machineHostname": "ckad9999",
+            "question": "A development team needs environment-specific configuration for their application. \n\nFirst, create a ConfigMap named `app-config` in namespace `workloads` containing exactly two key-value pairs: `APP_ENV=production` and `LOG_LEVEL=info`. \n\nNext, create a Pod named `config-pod` using the `nginx` image that consumes these configurations as environment variables. \n\nThe pod should be resource-efficient but have guaranteed resources, so configure it with a CPU request of `100m`, a CPU limit of `200m`, a memory request of `128Mi`, and a memory limit of `256Mi`.",
+            "concepts": ["configmaps", "pods", "environment-variables", "resource-limits"],
+            "verification": [
+                {
+                    "id": "1",
+                    "description": "ConfigMap is created with correct data",
+                    "verificationScriptFile": "q2_s1_validate_configmap.sh",
+                    "expectedOutput": "0",
+                    "weightage": 2
+                },
+                {
+                    "id": "2",
+                    "description": "Pod is created and running",
+                    "verificationScriptFile": "q2_s2_validate_pod_running.sh",
+                    "expectedOutput": "0",
+                    "weightage": 1
+                },
+                {
+                    "id": "3",
+                    "description": "Pod has environment variables from ConfigMap",
+                    "verificationScriptFile": "q2_s3_validate_pod_env_vars.sh",
+                    "expectedOutput": "0",
+                    "weightage": 2
+                },
+                {
+                    "id": "4",
+                    "description": "Pod has correct resource requirements",
+                    "verificationScriptFile": "q2_s4_validate_resources.sh",
+                    "expectedOutput": "0",
+                    "weightage": 2
+                }
+            ]
+        },
+        {
+            "id": "3",
+            "namespace": "networking",
+            "machineHostname": "ckad9999",
+            "question": "To enhance security through network segmentation, implement a network policy for a web application. \n\nCreate a NetworkPolicy named `allow-traffic` in namespace `networking` that allows incoming traffic only from pods with the label `tier=frontend` to pods with the label `app=web` on TCP port `80`. \n\nAll other incoming traffic to these pods should be denied. \n\nThis implements the principle of least privilege at the network level, ensuring that the web application can only be accessed by authorized frontend components.",
+            "concepts": ["network-policies", "pod-security", "network-security", "labels"],
+            "verification": [
+                {
+                    "id": "1",
+                    "description": "NetworkPolicy is created",
+                    "verificationScriptFile": "q3_s1_validate_policy_created.sh",
+                    "expectedOutput": "0",
+                    "weightage": 2
+                },
+                {
+                    "id": "2",
+                    "description": "NetworkPolicy has correct pod selector",
+                    "verificationScriptFile": "q3_s2_validate_pod_selector.sh",
+                    "expectedOutput": "0",
+                    "weightage": 2
+                },
+                {
+                    "id": "3",
+                    "description": "NetworkPolicy has correct ingress rules",
+                    "verificationScriptFile": "q3_s3_validate_policy_rules.sh",
+                    "expectedOutput": "0",
+                    "weightage": 1
+                }
+            ]
+        },
+        {
+            "id": "4",
+            "namespace": "pod-design",
+            "machineHostname": "ckad9999",
+            "question": "Create a Deployment in the `pod-design` namespace with the following specifications:\n- Name: `frontend`\n- Replicas: `3`\n- Image: `nginx:1.19.0`\n- Labels: `app=frontend, tier=frontend`\n- Pod Labels: same as deployment labels\n\nThen create a service `frontend-svc` that exposes the deployment on port `80`, targeting container port `80`, and is of type `ClusterIP`. Ensure the namespace exists before creating the resources.",
+            "concepts": ["deployments", "services", "labels", "selectors"],
+            "verification": [
+                {
+                    "id": "1",
+                    "description": "Namespace is created",
+                    "verificationScriptFile": "q4_s1_validate_namespace.sh",
+                    "expectedOutput": "0",
+                    "weightage": 1
+                },
+                {
+                    "id": "2",
+                    "description": "Deployment is created with correct specifications",
+                    "verificationScriptFile": "q4_s2_validate_deployment.sh",
+                    "expectedOutput": "0",
+                    "weightage": 3
+                },
+                {
+                    "id": "3",
+                    "description": "Deployment has correct number of replicas",
+                    "verificationScriptFile": "q4_s3_validate_replicas.sh",
+                    "expectedOutput": "0",
+                    "weightage": 1
+                },
+                {
+                    "id": "4",
+                    "description": "Service is created correctly",
+                    "verificationScriptFile": "q4_s4_validate_service.sh",
+                    "expectedOutput": "0",
+                    "weightage": 2
+                }
+            ]
+        },
+        {
+            "id": "5",
+            "namespace": "observability",
+            "machineHostname": "ckad9999",
+            "question": "Create a Pod named `probes-pod` in the `observability` namespace using the image `nginx`. Configure the following probes:\n\n1. Liveness probe: HTTP GET request to path `/healthz` on port `80`, with initialDelaySeconds=`10` and periodSeconds=`5`\n\n2. Readiness probe: HTTP GET request to path `/` on port `80`, with initialDelaySeconds=`5` and periodSeconds=`3`\n\nAlso, configure the pod with resource requests of CPU=`100m` and memory=`128Mi`, and resource limits of CPU=`200m` and memory=`256Mi`. \nEnsure the namespace exists before creating the pod.",
+            "concepts": ["probes", "liveness", "readiness", "resource-limits"],
+            "verification": [
+                {
+                    "id": "1",
+                    "description": "Namespace is created",
+                    "verificationScriptFile": "q5_s1_validate_namespace.sh",
+                    "expectedOutput": "0",
+                    "weightage": 1
+                },
+                {
+                    "id": "2",
+                    "description": "Pod is created with correct name and image",
+                    "verificationScriptFile": "q5_s2_validate_pod.sh",
+                    "expectedOutput": "0",
+                    "weightage": 1
+                },
+                {
+                    "id": "3",
+                    "description": "Liveness probe is configured correctly",
+                    "verificationScriptFile": "q5_s3_validate_liveness.sh",
+                    "expectedOutput": "0",
+                    "weightage": 2
+                },
+                {
+                    "id": "4",
+                    "description": "Readiness probe is configured correctly",
+                    "verificationScriptFile": "q5_s4_validate_readiness.sh",
+                    "expectedOutput": "0",
+                    "weightage": 2
+                },
+                {
+                    "id": "5",
+                    "description": "Resource limits and requests are configured correctly",
+                    "verificationScriptFile": "q5_s5_validate_resources.sh",
+                    "expectedOutput": "0",
+                    "weightage": 2
+                }
+            ]
+        }
+    ]
+}

@@ -7,8 +7,10 @@
         "category": "CKAD",
         "description": "Hands-on exercises covering core Kubernetes concepts, pod configuration, deployments, and services with practical tasks for application deployment in a cluster.",
         "warmUpTimeInSeconds": 260,
-         "difficulty": "Medium",
-         "examDurationInMinutes": 120
+        "difficulty": "Medium",
+        "examDurationInMinutes": 120,
+        "type": "full",
+        "isFree": false
       },
       {
         "id": "ckad-002",
@@ -18,7 +20,21 @@
         "description": "Series of practical tasks on multi-container pods, pod design patterns, configuration, services, and networking in Kubernetes environments.",
         "warmUpTimeInSeconds": 260,
         "difficulty": "Hard",
-        "examDurationInMinutes": 120
+        "examDurationInMinutes": 120,
+        "type": "full",
+        "isFree": false
+      },
+      {
+        "id": "ckad-mock",
+        "assetPath": "assets/exams/ckad/mock",
+        "name": "CKAD Mock Exam - Free Preview",
+        "category": "CKAD",
+        "description": "Free preview with 5 questions covering core CKAD concepts including deployments, ConfigMaps, NetworkPolicies, services, and probes.",
+        "warmUpTimeInSeconds": 120,
+        "difficulty": "Medium",
+        "examDurationInMinutes": 30,
+        "type": "mock",
+        "isFree": true
       },
       {
         "id": "cks-001",
@@ -28,7 +44,21 @@
         "description": "Practice essential Kubernetes security concepts including network policies, RBAC, supply chain security, and runtime protection",
         "warmUpTimeInSeconds": 260,
         "difficulty": "Hard",
-        "examDurationInMinutes": 120
+        "examDurationInMinutes": 120,
+        "type": "full",
+        "isFree": false
+      },
+      {
+        "id": "cks-mock",
+        "assetPath": "assets/exams/cks/mock",
+        "name": "CKS Mock Exam - Free Preview",
+        "category": "CKS",
+        "description": "Free preview with 3 questions covering NetworkPolicies, RBAC with minimal permissions, and Pod Security Standards.",
+        "warmUpTimeInSeconds": 120,
+        "difficulty": "Medium",
+        "examDurationInMinutes": 20,
+        "type": "mock",
+        "isFree": true
       },
       {
         "id": "cka-002",
@@ -38,7 +68,9 @@
         "description": "Comprehensive lab covering advanced Kubernetes administration topics including storage, networking, security, and troubleshooting with focus on real-world scenarios, updated with the latest CKA exam curriculum changes.",
         "warmUpTimeInSeconds": 360,
         "difficulty": "Hard",
-        "examDurationInMinutes": 120
+        "examDurationInMinutes": 120,
+        "type": "full",
+        "isFree": false
       },
       {
         "id": "cka-001",
@@ -48,7 +80,21 @@
         "description": "Practice essential Kubernetes administrator tasks covering cluster management, networking, storage, and security",
         "warmUpTimeInSeconds": 260,
         "difficulty": "Easy",
-        "examDurationInMinutes": 60
+        "examDurationInMinutes": 60,
+        "type": "full",
+        "isFree": false
+      },
+      {
+        "id": "cka-mock",
+        "assetPath": "assets/exams/cka/mock",
+        "name": "CKA Mock Exam - Free Preview",
+        "category": "CKA",
+        "description": "Free preview with 5 questions covering pods, ConfigMaps, storage, deployments, and RBAC basics.",
+        "warmUpTimeInSeconds": 120,
+        "difficulty": "Medium",
+        "examDurationInMinutes": 30,
+        "type": "mock",
+        "isFree": true
       },
       {
         "id": "docker-001",
@@ -58,7 +104,21 @@
         "description": "Fast-paced practice lab covering Docker fundamentals including images, containers, volumes, networking, OCI, logging, and security best practices.",
         "warmUpTimeInSeconds": 120,
         "difficulty": "Medium",
-        "examDurationInMinutes": 90
+        "examDurationInMinutes": 90,
+        "type": "full",
+        "isFree": false
+      },
+      {
+        "id": "docker-mock",
+        "assetPath": "assets/exams/other/docker-mock",
+        "name": "Docker Mock Exam - Free Preview",
+        "category": "Other",
+        "description": "Free preview with 3 questions covering container basics, volumes, and Docker networking.",
+        "warmUpTimeInSeconds": 60,
+        "difficulty": "Easy",
+        "examDurationInMinutes": 20,
+        "type": "mock",
+        "isFree": true
       },
       {
         "id": "helm-001",
@@ -68,7 +128,21 @@
         "description": "Comprehensive lab covering Helm basics including chart installation, repositories, customization, packaging, debugging, and advanced Helm operations for Kubernetes applications.",
         "warmUpTimeInSeconds": 260,
         "difficulty": "Medium",
-        "examDurationInMinutes": 90
+        "examDurationInMinutes": 90,
+        "type": "full",
+        "isFree": false
+      },
+      {
+        "id": "helm-mock",
+        "assetPath": "assets/exams/other/helm-mock",
+        "name": "Helm Mock Exam - Free Preview",
+        "category": "Other",
+        "description": "Free preview with 3 questions covering Helm repository management, chart installation, and release upgrades.",
+        "warmUpTimeInSeconds": 60,
+        "difficulty": "Easy",
+        "examDurationInMinutes": 20,
+        "type": "mock",
+        "isFree": true
       }
     ]
-  } 
+  }

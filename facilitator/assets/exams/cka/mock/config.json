@@ -1,0 +1,10 @@
+{
+  "lab": "cka-mock",
+  "workerNodes": 1,
+  "answers": "assets/exams/cka/mock/answers.md",
+  "questions": "assessment.json",
+  "totalMarks": 100,
+  "lowScore": 40,
+  "mediumScore": 60,
+  "highScore": 90
+}

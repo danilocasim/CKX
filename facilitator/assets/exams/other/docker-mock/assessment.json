@@ -1,0 +1,101 @@
+{
+  "questions": [
+    {
+      "id": "1",
+      "namespace": "default",
+      "machineHostname": "ckad9999",
+      "question": "Run a container named `web-server` using the `nginx:alpine` image. The container should:\n\n- Run in detached mode\n- Map host port `8080` to container port `80`\n- Set an environment variable `NGINX_HOST=localhost`",
+      "concepts": ["docker", "containers", "port mapping", "environment variables"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "Container web-server is running",
+          "verificationScriptFile": "q1_s1_validate_container_running.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "2",
+          "description": "Container uses the correct image",
+          "verificationScriptFile": "q1_s2_validate_image.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "3",
+          "description": "Port mapping is correct",
+          "verificationScriptFile": "q1_s3_validate_port.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "4",
+          "description": "Environment variable is set correctly",
+          "verificationScriptFile": "q1_s4_validate_env.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "namespace": "default",
+      "machineHostname": "ckad9999",
+      "question": "Create a Docker volume named `data-volume` and then run a container named `volume-test` using the `alpine:latest` image that:\n\n- Mounts the `data-volume` to `/app/data` in the container\n- Creates a file called `/app/data/test.txt` with the content 'Docker volumes test'\n- Exits after completing these actions",
+      "concepts": ["docker", "volumes", "data persistence"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "Volume data-volume exists",
+          "verificationScriptFile": "q2_s1_validate_volume.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "2",
+          "description": "Container was created with correct mount",
+          "verificationScriptFile": "q2_s2_validate_container_mount.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "3",
+          "description": "File exists in the volume with correct content",
+          "verificationScriptFile": "q2_s3_validate_file_content.sh",
+          "expectedOutput": "0",
+          "weightage": 4
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "namespace": "default",
+      "machineHostname": "ckad9999",
+      "question": "Create a custom bridge network named `app-network` with subnet `172.18.0.0/16`. Then run two containers:\n\n- Container `app1` using `alpine` image with network `app-network` and command to keep it running\n- Container `app2` using `alpine` image with network `app-network` and command to ping `app1` 3 times",
+      "concepts": ["docker", "networking", "dns"],
+      "verification": [
+        {
+          "id": "1",
+          "description": "Custom network exists with correct subnet",
+          "verificationScriptFile": "q3_s1_validate_network.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "2",
+          "description": "Container app1 is running on app-network",
+          "verificationScriptFile": "q3_s2_validate_app1.sh",
+          "expectedOutput": "0",
+          "weightage": 2
+        },
+        {
+          "id": "3",
+          "description": "Container app2 successfully pinged app1",
+          "verificationScriptFile": "q3_s3_validate_ping.sh",
+          "expectedOutput": "0",
+          "weightage": 4
+        }
+      ]
+    }
+  ]
+}
