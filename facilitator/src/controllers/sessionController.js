@@ -213,7 +213,7 @@ const terminateSession = async (req, res) => {
  */
 const terminateAllSessions = async (req, res) => {
   try {
-    const sessions = await sessionOrchestrator.listSessions();
+    const sessions = await sessionOrchestrator.getAllSessions();
     const sessionIds = sessions.map(s => s.sessionId || s.id);
     
     let terminated = 0;
