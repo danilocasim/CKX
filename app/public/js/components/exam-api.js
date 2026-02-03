@@ -1,7 +1,15 @@
 /**
  * Exam API Service
  * Handles all API interactions for the exam functionality
+ * Uses Auth.fetch when available to send Bearer token for facilitator API calls
  */
+var apiFetch = function (url, opts) {
+    opts = opts || {};
+    if (typeof window !== 'undefined' && window.Auth && typeof window.Auth.fetch === 'function') {
+        return window.Auth.fetch(url, opts);
+    }
+    return fetch(url, opts);
+};
 
 // Function to get exam ID from URL
 function getExamId() {
@@ -21,7 +29,7 @@ function getExamId() {
 
 // Function to check exam status
 function checkExamStatus(examId) {
-    return fetch(`/facilitator/api/v1/exams/${examId}/status`)
+    return apiFetch(`/facilitator/api/v1/exams/${examId}/status`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
@@ -37,7 +45,7 @@ function checkExamStatus(examId) {
 function fetchExamData(examId) {
     const apiUrl = `/facilitator/api/v1/exams/${examId}/questions`;
     
-    return fetch(apiUrl)
+    return apiFetch(apiUrl)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
@@ -55,7 +63,7 @@ function fetchExamData(examId) {
 
 // Function to fetch current exam information
 function fetchCurrentExamInfo() {
-    return fetch('/facilitator/api/v1/exams/current')
+    return apiFetch('/facilitator/api/v1/exams/current')
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
@@ -69,7 +77,7 @@ function fetchCurrentExamInfo() {
 
 // Function to evaluate exam
 function evaluateExam(examId) {
-    return fetch(`/facilitator/api/v1/exams/${examId}/evaluate`, {
+    return apiFetch(`/facilitator/api/v1/exams/${examId}/evaluate`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -85,7 +93,7 @@ function evaluateExam(examId) {
 
 // Function to terminate session
 function terminateSession(examId) {
-    return fetch(`/facilitator/api/v1/exams/${examId}/terminate`, {
+    return apiFetch(`/facilitator/api/v1/exams/${examId}/terminate`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -111,7 +119,7 @@ function getVncInfo() {
 
 // Function to track exam events
 function trackExamEvent(examId, events) {
-    return fetch(`/facilitator/api/v1/exams/${examId}/events`, {
+    return apiFetch(`/facilitator/api/v1/exams/${examId}/events`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -133,7 +141,7 @@ function trackExamEvent(examId, events) {
 
 // Function to submit user feedback
 function submitFeedback(examId, feedbackData) {
-    return fetch(`/facilitator/api/v1/exams/metrics/${examId}`, {
+    return apiFetch(`/facilitator/api/v1/exams/metrics/${examId}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -156,7 +164,7 @@ function submitFeedback(examId, feedbackData) {
 function fetchExamAnswers(examId) {
     const apiUrl = `/facilitator/api/v1/exams/${examId}/answers`;
 
-    return fetch(apiUrl)
+    return apiFetch(apiUrl)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);

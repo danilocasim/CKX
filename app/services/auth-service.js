@@ -3,8 +3,8 @@ const jwt = require('jsonwebtoken');
 // JWT secret must match facilitator's secret
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
 
-// Sailor-client URL for redirects
-const SAILOR_CLIENT_URL = process.env.SAILOR_CLIENT_URL || 'http://localhost:3001';
+// Public paths that do not require authentication (CKX login/register/payment)
+const PUBLIC_PATHS = ['/login', '/register', '/payment/success', '/auth/set-cookie'];
 
 class AuthService {
     /**
@@ -20,10 +20,11 @@ class AuthService {
     }
 
     /**
-     * Get login redirect URL
+     * Get login redirect URL (CKX login page with return URL)
      */
     getLoginUrl(returnUrl = '/') {
-        return `${SAILOR_CLIENT_URL}/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+        const base = typeof window !== 'undefined' ? '' : '';
+        return `/login?redirect=${encodeURIComponent(returnUrl)}`;
     }
 
     /**
@@ -32,34 +33,36 @@ class AuthService {
     authMiddleware() {
         return (req, res, next) => {
             // Skip auth for health check and static assets
-            if (req.path === '/health' || 
-                req.path.startsWith('/css/') || 
-                req.path.startsWith('/js/') || 
+            if (req.path === '/health' ||
+                req.path.startsWith('/css/') ||
+                req.path.startsWith('/js/') ||
                 req.path.startsWith('/assets/') ||
                 req.path === '/favicon.ico') {
                 return next();
             }
 
-            // Logout endpoint - clear cookie and redirect to sailor-client
-            if (req.path === '/logout') {
-                res.clearCookie('ckx_token');
-                return res.redirect(`${SAILOR_CLIENT_URL}/login`);
+            // Public paths (CKX login, register, payment success, set-cookie)
+            if (PUBLIC_PATHS.includes(req.path)) {
+                return next();
             }
 
-            // Check for token in query param (from sailor-client redirect)
+            // Logout endpoint - clear cookie and redirect to CKX login
+            if (req.path === '/logout') {
+                res.clearCookie('ckx_token');
+                return res.redirect('/login');
+            }
+
+            // Check for token in query param (e.g. from external link with ?token=)
             const queryToken = req.query.token;
             if (queryToken) {
                 const result = this.verifyToken(queryToken);
                 if (result.valid) {
-                    // Set cookie for future requests
                     res.cookie('ckx_token', queryToken, {
                         httpOnly: true,
-                        maxAge: 15 * 60 * 1000, // 15 minutes (matches JWT expiry)
+                        maxAge: 15 * 60 * 1000,
                         sameSite: 'lax'
                     });
                     req.user = result.decoded;
-                    
-                    // Redirect to remove token from URL (security)
                     const cleanUrl = req.path + (req.query.id ? `?id=${req.query.id}` : '');
                     return res.redirect(cleanUrl);
                 }
@@ -73,13 +76,11 @@ class AuthService {
                     req.user = result.decoded;
                     return next();
                 }
-                // Clear invalid cookie
                 res.clearCookie('ckx_token');
             }
 
-            // No valid token - redirect to login
-            const returnUrl = `http://localhost:30080${req.originalUrl}`;
-            return res.redirect(this.getLoginUrl(returnUrl));
+            // No valid token - redirect to CKX login
+            return res.redirect(this.getLoginUrl(req.originalUrl));
         };
     }
 }

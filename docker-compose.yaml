@@ -45,7 +45,6 @@ services:
       - SSH_USER=candidate
       - SSH_PASSWORD=password
       - JWT_SECRET=${JWT_SECRET:-ckx-jwt-secret-change-in-production}
-      - SAILOR_CLIENT_URL=http://localhost:3001
     deploy:
       resources:
         limits:
@@ -233,6 +232,8 @@ services:
       context: ./facilitator
       dockerfile: Dockerfile
     hostname: facilitator
+    ports:
+      - '3001:3000' # Expose so local webapp (npm run dev) can use FACILITATOR_URL=http://localhost:3001
     expose:
       - '3000'
     environment:

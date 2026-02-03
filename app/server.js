@@ -1,9 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const socketio = require('socket.io');
 const cookieParser = require('cookie-parser');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 const SSHTerminal = require('./services/ssh-terminal');
 const PublicService = require('./services/public-service');
 const RouteService = require('./services/route-service');
@@ -14,7 +16,8 @@ const AuthService = require('./services/auth-service');
 const PORT = process.env.PORT || 3000;
 
 // VNC service configuration from environment variables
-const VNC_SERVICE_HOST = process.env.VNC_SERVICE_HOST || 'remote-desktop-service';
+const VNC_SERVICE_HOST =
+  process.env.VNC_SERVICE_HOST || 'remote-desktop-service';
 const VNC_SERVICE_PORT = process.env.VNC_SERVICE_PORT || 6901;
 const VNC_PASSWORD = process.env.VNC_PASSWORD || 'bakku-the-wizard'; // Default password
 
@@ -33,32 +36,31 @@ const authService = new AuthService();
 
 // Initialize SSH Terminal
 const sshTerminal = new SSHTerminal({
-    host: SSH_HOST,
-    port: SSH_PORT,
-    username: SSH_USER,
-    password: SSH_PASSWORD
+  host: SSH_HOST,
+  port: SSH_PORT,
+  username: SSH_USER,
+  password: SSH_PASSWORD,
 });
 
 // Initialize Public Service
 const publicService = new PublicService(path.join(__dirname, 'public'));
 publicService.initialize();
 
-
 // Initialize VNC Service
 const vncService = new VNCService({
-    host: VNC_SERVICE_HOST,
-    port: VNC_SERVICE_PORT,
-    password: VNC_PASSWORD
+  host: VNC_SERVICE_HOST,
+  port: VNC_SERVICE_PORT,
+  password: VNC_PASSWORD,
 });
 
 // SSH terminal namespace
 const sshIO = io.of('/ssh');
 sshIO.on('connection', (socket) => {
-    sshTerminal.handleConnection(socket);
+  sshTerminal.handleConnection(socket);
 });
 
-// Initialize Route Service
-const routeService = new RouteService(publicService, vncService);
+// Initialize Route Service (pass authService for set-cookie route)
+const routeService = new RouteService(publicService, vncService, authService);
 
 // Enable CORS
 app.use(cors());
@@ -66,10 +68,39 @@ app.use(cors());
 // Cookie parser for auth
 app.use(cookieParser());
 
+// Proxy /facilitator to facilitator service (so login and API calls return JSON, not SPA HTML).
+// pathRewrite: /facilitator/api/v1/... -> /api/v1/... so facilitator receives correct path.
+// In Docker use facilitator:3000. When running webapp locally (npm run dev), use localhost:3001 (facilitator port in docker-compose).
+const facilitatorUrl =
+  process.env.FACILITATOR_URL ||
+  (fs.existsSync('/.dockerenv')
+    ? 'http://facilitator:3000'
+    : 'http://localhost:3001');
+app.use(
+  '/facilitator',
+  createProxyMiddleware({
+    target: facilitatorUrl,
+    changeOrigin: true,
+    pathRewrite: { '^/facilitator': '' },
+    onError(err, req, res) {
+      console.error('Facilitator proxy error', err.message);
+      res.status(503).json({
+        success: false,
+        error: 'Service Unavailable',
+        message:
+          'Authentication service unavailable. Is the facilitator running?',
+      });
+    },
+  })
+);
+
 // Auth middleware - protect all routes
 app.use(authService.authMiddleware());
 
-// Serve static files from the public directory
+// Serve React SPA build first (so / and /assets/* come from dist when present)
+const distDir = path.join(publicService.getPublicDir(), 'dist');
+app.use(express.static(distDir));
+// Then legacy static files (exam, results assets: /js/exam.js, /css/exam.css, etc.)
 app.use(express.static(publicService.getPublicDir()));
 
 // Setup VNC proxy
@@ -80,7 +111,9 @@ routeService.setupRoutes(app);
 
 // Start the server
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`VNC proxy configured to ${VNC_SERVICE_HOST}:${VNC_SERVICE_PORT}`);
-    console.log(`SSH service configured to ${SSH_HOST}:${SSH_PORT}`);
-}); 
+  console.log(`Server running on port ${PORT}`);
+  console.log(
+    `VNC proxy configured to ${VNC_SERVICE_HOST}:${VNC_SERVICE_PORT}`
+  );
+  console.log(`SSH service configured to ${SSH_HOST}:${SSH_PORT}`);
+});

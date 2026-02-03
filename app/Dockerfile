@@ -1,4 +1,4 @@
-FROM node:16-alpine
+FROM node:18-alpine
 
 WORKDIR /app
 
@@ -12,9 +12,10 @@ RUN npm install --production
 COPY server.js ./
 COPY services/ ./services/
 COPY public/ ./public/
+COPY client/ ./client/
 
-# Ensure the public directory exists
-RUN mkdir -p /app/public
+# Build React SPA (outputs to public/dist)
+RUN cd client && npm ci && npm run build
 
 # Expose the port
 EXPOSE 3000

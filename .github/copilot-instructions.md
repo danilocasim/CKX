@@ -19,8 +19,11 @@ docker-compose exec <service-name> bash
 cd app && npm install && npm run dev
 cd facilitator && npm install && npm run dev
 
-# Linting (no npm script configured)
+# Linting
 npx eslint facilitator/src --ext .js
+
+# Lint single file
+npx eslint facilitator/src/path/to/file.js
 ```
 
 Services: `webapp`, `facilitator`, `remote-desktop`, `remote-terminal`, `jumphost`, `k8s-api-server`, `redis`, `postgres`, `nginx`
@@ -66,6 +69,26 @@ Register new labs in `facilitator/assets/exams/labs.json`. See `docs/how-to-add-
 - Pure JavaScript with CommonJS modules (require/module.exports)
 - Vanilla JS frontend (no React/Vue/TypeScript)
 - Facilitator follows MVC pattern: `src/{controllers,services,routes,middleware}/`
+
+## Key Files
+
+- `facilitator/src/services/examService.js` - Core exam lifecycle logic
+- `facilitator/src/services/jumphostService.js` - SSH execution and environment setup
+- `facilitator/src/services/sessionOrchestrator.js` - Multi-session management
+- `facilitator/src/utils/redisClient.js` - Redis state management
+- `app/server.js` - Frontend server with VNC/SSH proxying
+- `app/services/sshTerminalService.js` - xterm.js terminal backend
+
+## API Endpoints
+
+Facilitator API (accessed via `/facilitator` prefix through nginx):
+
+- `GET/POST /api/v1/exams/` - List/create exams
+- `GET /api/v1/exams/:examId/questions` - Get questions
+- `POST /api/v1/exams/:examId/evaluate` - Evaluate solutions
+- `POST /api/v1/sessions` - Create session
+- `GET /api/v1/sessions/:id/status` - Get session status
+- `POST /api/v1/execute` - Execute command on jumphost
 
 ### Development Notes
 

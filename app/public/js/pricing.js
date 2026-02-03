@@ -14,33 +14,26 @@ document.addEventListener('DOMContentLoaded', function() {
  * Check if user is authenticated
  */
 async function checkAuthStatus() {
-  const token = localStorage.getItem('accessToken');
-  const authNav = document.getElementById('authNav');
+  // Nav.js populates nav-auth; only update loginBtn if still present (e.g. before nav runs)
   const loginBtn = document.getElementById('loginBtn');
-
-  if (token) {
-    // User is logged in - show profile link
-    try {
-      const response = await fetch('/facilitator/api/v1/users/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        loginBtn.textContent = data.data.displayName || data.data.email.split('@')[0];
-        loginBtn.href = '/dashboard.html';
-        loginBtn.classList.remove('btn-login');
-        loginBtn.classList.add('btn-profile');
-      } else {
-        // Token invalid - clear and show login
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-      }
-    } catch (error) {
-      console.error('Auth check failed:', error);
+  const token = localStorage.getItem('accessToken');
+  if (!token) return;
+  try {
+    const response = await fetch('/facilitator/api/v1/users/me', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (response.ok && loginBtn) {
+      const data = await response.json();
+      loginBtn.textContent = data.data.displayName || data.data.email.split('@')[0];
+      loginBtn.href = '/dashboard';
+      loginBtn.classList.remove('btn-login');
+      loginBtn.classList.add('btn-profile');
+    } else if (!response.ok) {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
     }
+  } catch (error) {
+    console.error('Auth check failed:', error);
   }
 }
 
@@ -92,11 +85,7 @@ function initializeButtons() {
  * Show authentication modal
  */
 function showAuthModal() {
-  // For now, just show an alert
-  // In production, this would show a modal with login/register forms
-  alert('Please sign in to purchase an access pass.');
-  // Could redirect to login page:
-  // window.location.href = '/login.html?redirect=/pricing.html';
+  window.location.href = '/login?redirect=' + encodeURIComponent('/pricing');
 }
 
 /**

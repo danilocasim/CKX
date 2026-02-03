@@ -1,3 +1,8 @@
+var apiFetch = function (url, opts) {
+    opts = opts || {};
+    return (window.Auth && typeof window.Auth.fetch === 'function' ? window.Auth.fetch(url, opts) : fetch(url, opts));
+};
+
 document.addEventListener('DOMContentLoaded', function() {
     // DOM elements
     const pageLoader = document.getElementById('pageLoader');
@@ -92,7 +97,7 @@ document.addEventListener('DOMContentLoaded', function() {
         confirmTerminateBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Terminating...';
         
         // Call the API to terminate the session
-        fetch(`/facilitator/api/v1/exams/${currentExamId}/terminate`, {
+        apiFetch(`/facilitator/api/v1/exams/${currentExamId}/terminate`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -134,7 +139,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update loader message
         updateLoaderMessage('Re-evaluation in progress...');
         
-        fetch(`/facilitator/api/v1/exams/${examId}/evaluate`, {
+        apiFetch(`/facilitator/api/v1/exams/${examId}/evaluate`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -243,7 +248,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const elapsedSeconds = Math.floor((Date.now() - pollingStartTime) / 1000);
         
         // Check if exam status and results are available
-        fetch(`/facilitator/api/v1/exams/${examId}/status`)
+        apiFetch(`/facilitator/api/v1/exams/${examId}/status`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
@@ -295,7 +300,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const apiUrl = `/facilitator/api/v1/exams/${examId}/result`;
         
-        fetch(apiUrl)
+        apiFetch(apiUrl)
             .then(response => {
                 if (!response.ok) {
                     if (response.status === 404) {
@@ -336,7 +341,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Check if we need to poll for results
     function checkResultsStatus(examId) {
-        return fetch(`/facilitator/api/v1/exams/${examId}/status`)
+        return apiFetch(`/facilitator/api/v1/exams/${examId}/status`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);

@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-bg-dark text-white antialiased min-h-screen;
+}
+
+/* Brand gradient text */
+.brand-gradient {
+  @apply font-extrabold text-xl bg-gradient-to-r from-primary to-primary-dark bg-clip-text text-transparent;
+}

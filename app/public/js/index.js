@@ -1,126 +1,186 @@
-document.addEventListener('DOMContentLoaded', function() {
+(function () {
+  var apiFetch = function (url, opts) {
+    return window.Auth && typeof window.Auth.fetch === 'function'
+      ? window.Auth.fetch(url, opts)
+      : fetch(url, opts || {});
+  };
+
+  document.addEventListener('DOMContentLoaded', function () {
     const startExamBtn = document.getElementById('startExamBtn');
     const pageLoader = document.getElementById('pageLoader');
     const loaderMessage = document.getElementById('loaderMessage');
-    const examSelectionModal = new bootstrap.Modal(document.getElementById('examSelectionModal'));
-    
+    const examSelectionModal = new bootstrap.Modal(
+      document.getElementById('examSelectionModal')
+    );
+
     // Form elements
     const examCategorySelect = document.getElementById('examCategory');
     const examNameSelect = document.getElementById('examName');
     const examDescription = document.getElementById('examDescription');
     const startSelectedExamBtn = document.getElementById('startSelectedExam');
     const viewPastResultsBtn = document.getElementById('viewPastResultsBtn');
-    
+
     // Hide View Results button by default - only show when current exam is EVALUATING or EVALUATED
     if (viewPastResultsBtn) {
-        viewPastResultsBtn.closest('li').style.display = 'none';
+      viewPastResultsBtn.closest('li').style.display = 'none';
     }
-    
+
     let labs = []; // Will store all labs fetched from the API
     let selectedLab = null; // Will store the currently selected lab
-    
+
     // Check for current exam status on page load
     checkCurrentExamStatus();
-    
+
+    // Show access status when logged in (read-only from backend)
+    if (typeof Auth !== 'undefined' && Auth.isAuthenticated()) {
+      loadAccessStatus();
+    }
+
     console.log('Loading labs on page load...');
     // Load labs data when the page loads
     fetchLabs(false);
 
+    function loadAccessStatus() {
+      const banner = document.getElementById('accessStatusBanner');
+      if (!banner) return;
+      apiFetch('/facilitator/api/v1/access/status')
+        .then(function (r) {
+          return r.ok ? r.json() : null;
+        })
+        .then(function (data) {
+          if (!data || !data.data) return;
+          const d = data.data;
+          banner.style.display = 'block';
+          banner.className = 'access-status-banner mt-3';
+          if (d.hasValidPass || d.hasAccess) {
+            banner.classList.add('status-full');
+            var remain =
+              d.remainingHuman ||
+              (d.hoursRemaining != null ? d.hoursRemaining + 'h' : '');
+            banner.textContent =
+              'Full access enabled' +
+              (remain ? ' · ' + remain + ' remaining' : '');
+          } else if (d.hasPendingPass) {
+            banner.classList.add('status-mock');
+            banner.textContent =
+              'You have a pass not yet activated. Mock exams available.';
+          } else {
+            banner.classList.add('status-mock');
+            banner.textContent =
+              'Mock exams only. Get an access pass for full exams.';
+          }
+        })
+        .catch(function () {
+          banner.style.display = 'block';
+          banner.className = 'access-status-banner mt-3 status-mock';
+          banner.textContent =
+            'Mock exams available. Sign in and get an access pass for full exams.';
+        });
+    }
+
     // Function to check current exam status
     function checkCurrentExamStatus() {
-        fetch('/facilitator/api/v1/exams/current')
-            .then(response => {
-                if (!response.ok) {
-                    if (response.status !== 404) {
-                        console.error('Error checking current exam status:', response.status);
-                    }
-                    return null;
+      apiFetch('/facilitator/api/v1/exams/current')
+        .then((response) => {
+          if (!response.ok) {
+            if (response.status !== 404) {
+              console.error(
+                'Error checking current exam status:',
+                response.status
+              );
+            }
+            return null;
+          }
+          return response.json();
+        })
+        .then((data) => {
+          if (data && data.id) {
+            // Store current exam data in localStorage for the View Results functionality
+            localStorage.setItem('currentExamData', JSON.stringify(data));
+
+            // Show View Results button only if status is EVALUATING or EVALUATED
+            if (data.status === 'EVALUATING' || data.status === 'EVALUATED') {
+              if (viewPastResultsBtn) {
+                viewPastResultsBtn.closest('li').style.display = 'block';
+              }
+            }
+
+            // If exam is in PREPARING state, show loading overlay and start polling
+            if (data.status === 'PREPARING') {
+              console.log(
+                'Exam is in PREPARING state, showing loading overlay'
+              );
+              showLoadingOverlay();
+              updateLoadingMessage('Preparing lab environment...');
+              updateExamInfo(data.info?.name || 'Unknown Exam');
+              // Start polling for status
+              pollExamStatus(data.id).then((statusData) => {
+                if (statusData.status === 'READY') {
+                  // Redirect to exam page when ready
+                  window.location.href = `/exam.html?id=${data.id}`;
                 }
-                return response.json();
-            })
-            .then(data => {
-                if (data && data.id) {
-                    // Store current exam data in localStorage for the View Results functionality
-                    localStorage.setItem('currentExamData', JSON.stringify(data));
-                    
-                    // Show View Results button only if status is EVALUATING or EVALUATED
-                    if (data.status === 'EVALUATING' || data.status === 'EVALUATED') {
-                        if (viewPastResultsBtn) {
-                            viewPastResultsBtn.closest('li').style.display = 'block';
-                        }
-                    }
-                    
-                    // If exam is in PREPARING state, show loading overlay and start polling
-                    if (data.status === 'PREPARING') {
-                        console.log('Exam is in PREPARING state, showing loading overlay');
-                        showLoadingOverlay();
-                        updateLoadingMessage('Preparing lab environment...');
-                        updateExamInfo(data.info?.name || 'Unknown Exam');
-                        // Start polling for status
-                        pollExamStatus(data.id).then(statusData => {
-                            if (statusData.status === 'READY') {
-                                // Redirect to exam page when ready
-                                window.location.href = `/exam.html?id=${data.id}`;
-                            }
-                        });
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Error checking current exam status:', error);
-            });
+              });
+            }
+          }
+        })
+        .catch((error) => {
+          console.error('Error checking current exam status:', error);
+        });
     }
 
     // Event listener for the "Start Exam" button
-    startExamBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        
-        console.log('Checking for active exam sessions...');
-        // First check if there's any active exam
-        fetch('/facilitator/api/v1/exams/current')
-            .then(response => {
-                if (response.status === 404) {
-                    console.log('No active exam found, proceeding with new exam');
-                    // No active exam, proceed as normal
-                    if (labs.length > 0) {
-                        console.log('Using pre-loaded labs data');
-                        examSelectionModal.show();
-                    } else {
-                        console.log('No pre-loaded labs data available, fetching now...');
-                        fetchLabs(true);
-                    }
-                    return null;
-                }
-                
-                if (!response.ok) {
-                    console.error('Error checking current exam status:', response.status);
-                    return null;
-                }
-                
-                return response.json();
-            })
-            .then(data => {
-                if (data && data.id) {
-                    console.log('Active exam found:', data.id, 'Status:', data.status);
-                    // Active exam found, show warning modal
-                    showActiveExamWarningModal(data);
-                }
-            })
-            .catch(error => {
-                console.error('Error checking for active exam:', error);
-                // Proceed anyway in case of error
-                if (labs.length > 0) {
-                    examSelectionModal.show();
-                } else {
-                    fetchLabs(true);
-                }
-            });
+    startExamBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+
+      console.log('Checking for active exam sessions...');
+      // First check if there's any active exam
+      apiFetch('/facilitator/api/v1/exams/current')
+        .then((response) => {
+          if (response.status === 404) {
+            console.log('No active exam found, proceeding with new exam');
+            // No active exam, proceed as normal
+            if (labs.length > 0) {
+              console.log('Using pre-loaded labs data');
+              examSelectionModal.show();
+            } else {
+              console.log('No pre-loaded labs data available, fetching now...');
+              fetchLabs(true);
+            }
+            return null;
+          }
+
+          if (!response.ok) {
+            console.error(
+              'Error checking current exam status:',
+              response.status
+            );
+            return null;
+          }
+
+          return response.json();
+        })
+        .then((data) => {
+          if (data && data.id) {
+            console.log('Active exam found:', data.id, 'Status:', data.status);
+            // Active exam found, show warning modal
+            showActiveExamWarningModal(data);
+          }
+        })
+        .catch((error) => {
+          console.error('Error checking for active exam:', error);
+          // Proceed anyway in case of error
+          if (labs.length > 0) {
+            examSelectionModal.show();
+          } else {
+            fetchLabs(true);
+          }
+        });
     });
-    
+
     // Function to show warning modal for active exam
     function showActiveExamWarningModal(examData) {
-        // Create modal HTML
-        const modalHTML = `
+      // Create modal HTML
+      const modalHTML = `
             <div class="modal fade" id="activeExamWarningModal" tabindex="-1" aria-labelledby="activeExamWarningModalLabel" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content rounded">
@@ -131,7 +191,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="modal-body">
                             <div class="alert alert-info">
                                 <p>You already have an active exam session:</p>
-                                <p><strong>${examData.info?.name || 'Unknown Exam'}</strong></p>
+                                <p><strong>${
+                                  examData.info?.name || 'Unknown Exam'
+                                }</strong></p>
                                 <p class="mb-0">Only one active exam session can be present at a time.</p>
                             </div>
                         </div>
@@ -143,190 +205,221 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
         `;
-        
-        // Add modal to DOM if it doesn't exist
-        if (!document.getElementById('activeExamWarningModal')) {
-            document.body.insertAdjacentHTML('beforeend', modalHTML);
-        }
-        
-        // Get modal element and create Bootstrap modal
-        const modalElement = document.getElementById('activeExamWarningModal');
-        const warningModal = new bootstrap.Modal(modalElement);
-        
-        // Show the modal
-        warningModal.show();
-        
-        // Remove any existing event listeners by cloning and replacing the buttons
-        const oldTerminateBtn = document.getElementById('terminateAndProceedBtn');
-        const newTerminateBtn = oldTerminateBtn.cloneNode(true);
-        oldTerminateBtn.parentNode.replaceChild(newTerminateBtn, oldTerminateBtn);
-        
-        const oldContinueBtn = document.getElementById('continueSessionBtn');
-        const newContinueBtn = oldContinueBtn.cloneNode(true);
-        oldContinueBtn.parentNode.replaceChild(newContinueBtn, oldContinueBtn);
-        
-        // Add event listener for continue session button
-        document.getElementById('continueSessionBtn').addEventListener('click', function() {
-            // Redirect to the current exam
-            window.location.href = `/exam.html?id=${examData.id}`;
+
+      // Add modal to DOM if it doesn't exist
+      if (!document.getElementById('activeExamWarningModal')) {
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+      }
+
+      // Get modal element and create Bootstrap modal
+      const modalElement = document.getElementById('activeExamWarningModal');
+      const warningModal = new bootstrap.Modal(modalElement);
+
+      // Show the modal
+      warningModal.show();
+
+      // Remove any existing event listeners by cloning and replacing the buttons
+      const oldTerminateBtn = document.getElementById('terminateAndProceedBtn');
+      const newTerminateBtn = oldTerminateBtn.cloneNode(true);
+      oldTerminateBtn.parentNode.replaceChild(newTerminateBtn, oldTerminateBtn);
+
+      const oldContinueBtn = document.getElementById('continueSessionBtn');
+      const newContinueBtn = oldContinueBtn.cloneNode(true);
+      oldContinueBtn.parentNode.replaceChild(newContinueBtn, oldContinueBtn);
+
+      // Add event listener for continue session button
+      document
+        .getElementById('continueSessionBtn')
+        .addEventListener('click', function () {
+          // Redirect to the current exam
+          window.location.href = `/exam.html?id=${examData.id}`;
         });
-        
-        // Add event listener for terminate and proceed button
-        document.getElementById('terminateAndProceedBtn').addEventListener('click', function() {
-            // Update button to show progress
-            const terminateBtn = document.getElementById('terminateAndProceedBtn');
-            terminateBtn.disabled = true;
-            terminateBtn.innerHTML = '<div class="d-flex align-items-center justify-content-center"><span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span><span>TERMINATING...</span></div>';
-            
-            // Show loading overlay
-            showLoadingOverlay();
-            updateLoadingMessage('Terminating active session...');
-            
-            console.log('Attempting to terminate exam:', examData.id);
-            // Call API to terminate the active exam
-            fetch(`/facilitator/api/v1/exams/${examData.id}/terminate`, {
-                method: 'POST'
-            })
-            .then(response => {
-                if (!response.ok) {
-                    console.error('Termination failed with status:', response.status);
-                    throw new Error('Failed to terminate exam. Status: ' + response.status);
-                }
-                return response.json();
+
+      // Add event listener for terminate and proceed button
+      document
+        .getElementById('terminateAndProceedBtn')
+        .addEventListener('click', function () {
+          // Update button to show progress
+          const terminateBtn = document.getElementById(
+            'terminateAndProceedBtn'
+          );
+          terminateBtn.disabled = true;
+          terminateBtn.innerHTML =
+            '<div class="d-flex align-items-center justify-content-center"><span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span><span>TERMINATING...</span></div>';
+
+          // Show loading overlay
+          showLoadingOverlay();
+          updateLoadingMessage('Terminating active session...');
+
+          console.log('Attempting to terminate exam:', examData.id);
+          // Call API to terminate the active exam
+          apiFetch(`/facilitator/api/v1/exams/${examData.id}/terminate`, {
+            method: 'POST',
+          })
+            .then((response) => {
+              if (!response.ok) {
+                console.error(
+                  'Termination failed with status:',
+                  response.status
+                );
+                throw new Error(
+                  'Failed to terminate exam. Status: ' + response.status
+                );
+              }
+              return response.json();
             })
             .then((data) => {
-                console.log('Exam terminated successfully:', examData.id);
-                // Hide the warning modal
-                warningModal.hide();
-                
-                // Clear any stored exam data
-                localStorage.removeItem('currentExamData');
-                localStorage.removeItem('currentExamId');
-                
-                // Proceed with starting a new exam
-                hideLoadingOverlay();
-                if (labs.length > 0) {
-                    examSelectionModal.show();
-                } else {
-                    fetchLabs(true);
-                }
+              console.log('Exam terminated successfully:', examData.id);
+              // Hide the warning modal
+              warningModal.hide();
+
+              // Clear any stored exam data
+              localStorage.removeItem('currentExamData');
+              localStorage.removeItem('currentExamId');
+
+              // Proceed with starting a new exam
+              hideLoadingOverlay();
+              if (labs.length > 0) {
+                examSelectionModal.show();
+              } else {
+                fetchLabs(true);
+              }
             })
-            .catch(error => {
-                console.error('Error terminating exam:', error);
-                hideLoadingOverlay();
-                
-                // Reset button state
-                terminateBtn.disabled = false;
-                terminateBtn.innerHTML = 'Terminate and Proceed';
-                
-                alert('Failed to terminate the active exam. Please try again later.');
+            .catch((error) => {
+              console.error('Error terminating exam:', error);
+              hideLoadingOverlay();
+
+              // Reset button state
+              terminateBtn.disabled = false;
+              terminateBtn.innerHTML = 'Terminate and Proceed';
+
+              alert(
+                'Failed to terminate the active exam. Please try again later.'
+              );
             });
-            
-            // Clean up the modal when it's hidden
-            modalElement.addEventListener('hidden.bs.modal', function() {
-                console.log('Modal hidden, cleaning up event listeners');
-                
-                // Remove event listeners by replacing buttons with clones if they exist
-                if (document.getElementById('terminateAndProceedBtn')) {
-                    const oldTerminateBtn = document.getElementById('terminateAndProceedBtn');
-                    const newTerminateBtn = oldTerminateBtn.cloneNode(true);
-                    oldTerminateBtn.parentNode.replaceChild(newTerminateBtn, oldTerminateBtn);
-                }
-                
-                if (document.getElementById('continueSessionBtn')) {
-                    const oldContinueBtn = document.getElementById('continueSessionBtn');
-                    const newContinueBtn = oldContinueBtn.cloneNode(true);
-                    oldContinueBtn.parentNode.replaceChild(newContinueBtn, oldContinueBtn);
-                }
-            });
+
+          // Clean up the modal when it's hidden
+          modalElement.addEventListener('hidden.bs.modal', function () {
+            console.log('Modal hidden, cleaning up event listeners');
+
+            // Remove event listeners by replacing buttons with clones if they exist
+            if (document.getElementById('terminateAndProceedBtn')) {
+              const oldTerminateBtn = document.getElementById(
+                'terminateAndProceedBtn'
+              );
+              const newTerminateBtn = oldTerminateBtn.cloneNode(true);
+              oldTerminateBtn.parentNode.replaceChild(
+                newTerminateBtn,
+                oldTerminateBtn
+              );
+            }
+
+            if (document.getElementById('continueSessionBtn')) {
+              const oldContinueBtn =
+                document.getElementById('continueSessionBtn');
+              const newContinueBtn = oldContinueBtn.cloneNode(true);
+              oldContinueBtn.parentNode.replaceChild(
+                newContinueBtn,
+                oldContinueBtn
+              );
+            }
+          });
         });
     }
-    
+
     // Fetch labs from the facilitator API
     function fetchLabs(showLoader = true) {
-        console.log('Fetching labs, showLoader:', showLoader);
-        if (showLoader) {
-            pageLoader.style.display = 'flex';
-            loaderMessage.textContent = 'Loading labs...';
-        }
-        
-        fetch('/facilitator/api/v1/assements/')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Failed to fetch labs. Status: ' + response.status);
-                }
-                return response.json();
-            })
-            .then(data => {
-                labs = data;
-                console.log('Labs loaded successfully, count:', labs.length);
-                if (showLoader) {
-                    pageLoader.style.display = 'none';
-                    examSelectionModal.show();
-                }
-                populateLabCategories();
-            })
-            .catch(error => {
-                console.error('Error fetching labs:', error);
-                if (showLoader) {
-                    pageLoader.style.display = 'none';
-                    alert('Failed to load labs. Please try again later.');
-                }
-            });
+      console.log('Fetching labs, showLoader:', showLoader);
+      if (showLoader) {
+        pageLoader.style.display = 'flex';
+        loaderMessage.textContent = 'Loading labs...';
+      }
+
+      apiFetch('/facilitator/api/v1/exams/labs')
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error('Failed to fetch labs. Status: ' + response.status);
+          }
+          return response.json();
+        })
+        .then((data) => {
+          labs = data.labs || data;
+          console.log('Labs loaded successfully, count:', labs.length);
+          if (showLoader) {
+            pageLoader.style.display = 'none';
+            examSelectionModal.show();
+          }
+          populateLabCategories();
+        })
+        .catch((error) => {
+          console.error('Error fetching labs:', error);
+          if (showLoader) {
+            pageLoader.style.display = 'none';
+            alert('Failed to load labs. Please try again later.');
+          }
+        });
     }
-    
+
     // Populate the lab categories dropdown
     function populateLabCategories() {
-        // Get unique categories
-        const categories = [...new Set(labs.map(lab => lab.category))];
-        
-        // If CKAD is available, select it by default
-        if (categories.includes('CKAD')) {
-            examCategorySelect.value = 'CKAD';
-            filterLabsByCategory('CKAD');
-        } else if (categories.length > 0) {
-            examCategorySelect.value = categories[0];
-            filterLabsByCategory(categories[0]);
-        }
+      // Get unique categories
+      const categories = [...new Set(labs.map((lab) => lab.category))];
+
+      // If CKAD is available, select it by default
+      if (categories.includes('CKAD')) {
+        examCategorySelect.value = 'CKAD';
+        filterLabsByCategory('CKAD');
+      } else if (categories.length > 0) {
+        examCategorySelect.value = categories[0];
+        filterLabsByCategory(categories[0]);
+      }
     }
-    
+
     // Filter labs by category and populate the labs dropdown
     function filterLabsByCategory(category) {
-        const filteredLabs = labs.filter(lab => lab.category === category);
-        
-        // Clear existing options
-        examNameSelect.innerHTML = '<option value="">Select a lab</option>';
-        
-        // Add filtered labs to the dropdown
-        filteredLabs.forEach(lab => {
-            const option = document.createElement('option');
-            option.value = lab.id;
-            option.textContent = lab.name;
-            examNameSelect.appendChild(option);
-        });
-        
-        // Enable the lab name select
-        examNameSelect.disabled = false;
-        
-        // If there are labs in this category, select the first one
-        if (filteredLabs.length > 0) {
-            examNameSelect.value = filteredLabs[0].id;
-            updateLabDescription(filteredLabs[0]);
-        } else {
-            examDescription.textContent = 'No labs available for this category.';
-            startSelectedExamBtn.disabled = true;
-        }
+      const filteredLabs = labs.filter((lab) => lab.category === category);
+
+      // Clear existing options
+      examNameSelect.innerHTML = '<option value="">Select a lab</option>';
+
+      // Add filtered labs to the dropdown
+      filteredLabs.forEach((lab) => {
+        const option = document.createElement('option');
+        option.value = lab.id;
+        option.textContent = lab.name;
+        examNameSelect.appendChild(option);
+      });
+
+      // Enable the lab name select
+      examNameSelect.disabled = false;
+
+      // If there are labs in this category, select the first one
+      if (filteredLabs.length > 0) {
+        examNameSelect.value = filteredLabs[0].id;
+        updateLabDescription(filteredLabs[0]);
+      } else {
+        examDescription.textContent = 'No labs available for this category.';
+        startSelectedExamBtn.disabled = true;
+      }
     }
-    
+
     // Update the lab description when a lab is selected
     function updateLabDescription(lab) {
-        // Create a nicely formatted description
-        const difficultyText = lab.difficulty || 'Medium';
-        const examTimeText = lab.examDurationInMinutes || lab.estimatedTime || '30';
-        
-        const descriptionHTML = `
+      // Create a nicely formatted description
+      const difficultyText = lab.difficulty || 'Medium';
+      const examTimeText =
+        lab.duration || lab.examDurationInMinutes || lab.estimatedTime || '30';
+      const isMock = lab.type === 'mock' || lab.isFree;
+      const accessBadge = isMock
+        ? '<span class="exam-badge exam-badge-mock">Free Mock Exam</span>'
+        : '<span class="exam-badge exam-badge-full">Full Exam (Paid)</span>';
+
+      const descriptionHTML = `
+            <div class="mb-2">${accessBadge}</div>
             <div class="exam-details">
-                <p class="mb-0">${lab.description || 'No description available.'}</p>
+                <p class="mb-0">${
+                  lab.description || 'No description available.'
+                }</p>
             </div>
             <div class="exam-meta-container mt-3 pt-2 border-top">
                 <div class="d-flex justify-content-start align-items-center">
@@ -346,224 +439,259 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
         `;
-        
-        // No need to add styles dynamically anymore since they're in the CSS file
-        
-        // Use innerHTML to render the HTML content
-        examDescription.innerHTML = descriptionHTML;
-        selectedLab = lab;
-        startSelectedExamBtn.disabled = false;
+
+      // No need to add styles dynamically anymore since they're in the CSS file
+
+      // Use innerHTML to render the HTML content
+      examDescription.innerHTML = descriptionHTML;
+      selectedLab = lab;
+      startSelectedExamBtn.disabled = false;
     }
-    
+
     // Event listener for the exam category select
-    examCategorySelect.addEventListener('change', function() {
-        filterLabsByCategory(this.value);
+    examCategorySelect.addEventListener('change', function () {
+      filterLabsByCategory(this.value);
     });
-    
+
     // Event listener for the exam name select
-    examNameSelect.addEventListener('change', function() {
-        if (this.value) {
-            const lab = labs.find(lab => lab.id === this.value);
-            if (lab) {
-                updateLabDescription(lab);
-            }
-        } else {
-            examDescription.textContent = 'No lab selected.';
-            selectedLab = null;
-            startSelectedExamBtn.disabled = true;
+    examNameSelect.addEventListener('change', function () {
+      if (this.value) {
+        const lab = labs.find((lab) => lab.id === this.value);
+        if (lab) {
+          updateLabDescription(lab);
         }
+      } else {
+        examDescription.textContent = 'No lab selected.';
+        selectedLab = null;
+        startSelectedExamBtn.disabled = true;
+      }
     });
-    
+
     // Event listener for the start selected exam button
-    startSelectedExamBtn.addEventListener('click', function() {
-        if (selectedLab) {
-            examSelectionModal.hide();
-            showLoadingOverlay(); // Show the loading overlay instead of pageLoader
-            updateLoadingMessage('Starting lab environment...');
-            updateExamInfo(`Lab: ${selectedLab.name} | Difficulty: ${selectedLab.difficulty || 'Medium'}`);
-            let userAgent = '';
-            try {
-                userAgent = navigator.userAgent;
-            } catch (error) {
-                console.error('Error getting user agent:', error);
-            }
-            selectedLab.userAgent = userAgent;
-            
-            // Make a POST request to the facilitator API - using exams endpoint for POST
-            fetch('/facilitator/api/v1/exams/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(selectedLab)
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Failed to start lab. Status: ' + response.status);
-                }
-                return response.json();
-            })
-            .then(data => {
-                // Store exam ID in localStorage
-                localStorage.setItem('currentExamId', data.id);
-                
-                // Start polling for status
-                const warmUpTime = data.warmUpTimeInSeconds || 30;
-                updateLoadingMessage(`Preparing your lab environment (${warmUpTime}s estimated)`);
-                
-                // Poll for exam status until it's ready
-                return pollExamStatus(data.id);
-            })
-            .then(() => {
-                // Redirect to the lab page after status is READY
-                const examId = localStorage.getItem('currentExamId');
-                window.location.href = `/exam.html?id=${examId}`;
-            })
-            .catch(error => {
-                console.error('Error starting lab:', error);
-                hideLoadingOverlay();
-                alert('Failed to start the lab. Please try again later.');
-            });
+    startSelectedExamBtn.addEventListener('click', function () {
+      if (selectedLab) {
+        examSelectionModal.hide();
+        showLoadingOverlay(); // Show the loading overlay instead of pageLoader
+        updateLoadingMessage('Starting lab environment...');
+        updateExamInfo(
+          `Lab: ${selectedLab.name} | Difficulty: ${
+            selectedLab.difficulty || 'Medium'
+          }`
+        );
+        let userAgent = '';
+        try {
+          userAgent = navigator.userAgent;
+        } catch (error) {
+          console.error('Error getting user agent:', error);
         }
+        selectedLab.userAgent = userAgent;
+        // Facilitator expects labId to look up full lab (including assetPath); send id as labId
+        const createPayload = { ...selectedLab, labId: selectedLab.id };
+
+        // Make a POST request to the facilitator API - using exams endpoint for POST
+        apiFetch('/facilitator/api/v1/exams/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(createPayload),
+        })
+          .then(async (response) => {
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              const msg =
+                data.message ||
+                data.error ||
+                'Failed to start lab. Status: ' + response.status;
+              throw new Error(msg);
+            }
+            return data;
+          })
+          .then((data) => {
+            const examId = data.id;
+            if (!examId) {
+              throw new Error('Invalid response: no exam id');
+            }
+            // Store exam ID in localStorage
+            localStorage.setItem('currentExamId', examId);
+
+            // Start polling for status
+            const warmUpTime = data.warmUpTimeInSeconds || 30;
+            updateLoadingMessage(
+              `Preparing your lab environment (${warmUpTime}s estimated)`
+            );
+
+            // Poll for exam status until it's ready
+            return pollExamStatus(data.id);
+          })
+          .then(() => {
+            // Redirect to the lab page after status is READY
+            const examId = localStorage.getItem('currentExamId');
+            window.location.href = `/exam.html?id=${examId}`;
+          })
+          .catch((error) => {
+            console.error('Error starting lab:', error);
+            hideLoadingOverlay();
+            alert(
+              error.message ||
+                'Failed to start the lab. Please try again later.'
+            );
+          });
+      }
     });
 
     // Add new functions for exam status handling
     function showLoadingOverlay() {
-        document.getElementById('loadingOverlay').style.display = 'flex';
+      document.getElementById('loadingOverlay').style.display = 'flex';
     }
 
     function hideLoadingOverlay() {
-        document.getElementById('loadingOverlay').style.display = 'none';
+      document.getElementById('loadingOverlay').style.display = 'none';
     }
 
     function updateProgressBar(progress) {
-        document.getElementById('progressBar').style.width = `${progress}%`;
+      document.getElementById('progressBar').style.width = `${progress}%`;
     }
 
     function updateLoadingMessage(message) {
-        document.getElementById('loadingMessage').textContent = message;
+      document.getElementById('loadingMessage').textContent = message;
     }
 
     function updateExamInfo(info) {
-        document.getElementById('examInfo').textContent = info;
+      document.getElementById('examInfo').textContent = info;
     }
 
     async function pollExamStatus(examId) {
-        const startTime = Date.now();
-        const pollInterval = 1000; // Poll every 1 second
-        
-        return new Promise((resolve, reject) => {
-            const poll = async () => {
-                try {
-                    const response = await fetch(`/facilitator/api/v1/exams/${examId}/status`);
-                    const data = await response.json();
-                    
-                    // set warmup time in seconds
-                    const warmUpTimeInSeconds = data.warmUpTimeInSeconds || 30;
+      const startTime = Date.now();
+      const pollInterval = 1000; // Poll every 1 second
 
-                    if (data.status === 'READY') {
-                        // Set progress to 100% when ready
-                        updateProgressBar(100);
-                        updateLoadingMessage('Lab environment is ready! Redirecting...');
-                        // Wait a moment for the user to see the 100% progress
-                        setTimeout(() => resolve(data), 1000);
-                        return;
-                    }
-                    
-                    // Calculate progress based on warm-up time
-                    const elapsedTime = (Date.now() - startTime) / 1000;
-                    const progress = Math.min((elapsedTime / warmUpTimeInSeconds) * 100, 95);
-                    updateProgressBar(progress);
-                    updateLoadingMessage(data.message || 'Preparing lab environment...');
-                    
-                    // Continue polling
-                    setTimeout(poll, pollInterval);
-                } catch (error) {
-                    console.error('Error polling exam status:', error);
-                    // Show error in the loading overlay
-                    updateLoadingMessage(`Error: ${error.message}. Retrying...`);
-                    // Continue polling despite errors
-                    setTimeout(poll, pollInterval);
-                }
-            };
-            
-            poll();
-        });
+      return new Promise((resolve, reject) => {
+        const poll = async () => {
+          try {
+            const response = await apiFetch(
+              `/facilitator/api/v1/exams/${examId}/status`
+            );
+            const data = await response.json();
+
+            // set warmup time in seconds
+            const warmUpTimeInSeconds = data.warmUpTimeInSeconds || 30;
+
+            if (data.status === 'READY') {
+              // Set progress to 100% when ready
+              updateProgressBar(100);
+              updateLoadingMessage('Lab environment is ready! Redirecting...');
+              // Wait a moment for the user to see the 100% progress
+              setTimeout(() => resolve(data), 1000);
+              return;
+            }
+
+            // Calculate progress based on warm-up time
+            const elapsedTime = (Date.now() - startTime) / 1000;
+            const progress = Math.min(
+              (elapsedTime / warmUpTimeInSeconds) * 100,
+              95
+            );
+            updateProgressBar(progress);
+            updateLoadingMessage(
+              data.message || 'Preparing lab environment...'
+            );
+
+            // Continue polling
+            setTimeout(poll, pollInterval);
+          } catch (error) {
+            console.error('Error polling exam status:', error);
+            // Show error in the loading overlay
+            updateLoadingMessage(`Error: ${error.message}. Retrying...`);
+            // Continue polling despite errors
+            setTimeout(poll, pollInterval);
+          }
+        };
+
+        poll();
+      });
     }
 
     // Modify the existing startExam function
     async function startExam(examId) {
-        try {
-            showLoadingOverlay();
-            updateLoadingMessage('Starting exam environment...');
-            
-            const response = await fetch('/facilitator/api/v1/exams', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ examId })
-            });
-            
-            const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.message || 'Failed to start exam');
-            }
-            
-            // Store exam ID in localStorage
-            localStorage.setItem('currentExamId', data.id);
-            
-            // Start polling for status
-            await pollExamStatus(data.id, data.warmUpTimeInSeconds || 30);
-            
-            // Redirect to exam page when ready
-            window.location.href = `/exam.html?id=${data.id}`;
-        } catch (error) {
-            console.error('Error starting exam:', error);
-            hideLoadingOverlay();
-            alert('Failed to start exam: ' + error.message);
+      try {
+        showLoadingOverlay();
+        updateLoadingMessage('Starting exam environment...');
+
+        const response = await apiFetch('/facilitator/api/v1/exams', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ examId }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Failed to start exam');
         }
+
+        // Store exam ID in localStorage
+        localStorage.setItem('currentExamId', data.id);
+
+        // Start polling for status
+        await pollExamStatus(data.id, data.warmUpTimeInSeconds || 30);
+
+        // Redirect to exam page when ready
+        window.location.href = `/exam.html?id=${data.id}`;
+      } catch (error) {
+        console.error('Error starting exam:', error);
+        hideLoadingOverlay();
+        alert('Failed to start exam: ' + error.message);
+      }
     }
 
     // Modify the dropdown population to include difficulty info
     function populateDropdown(labs) {
-        const dropdown = document.getElementById('examDropdown');
-        dropdown.innerHTML = '';
-        
-        labs.forEach(lab => {
-            const option = document.createElement('option');
-            option.value = lab.id;
-            option.textContent = `${lab.name} (${lab.difficulty || 'Medium'})`;
-            option.title = `${lab.description}\nDifficulty: ${lab.difficulty || 'Medium'}\nEstimated Time: ${lab.estimatedTime || '30'} minutes`;
-            dropdown.appendChild(option);
-        });
+      const dropdown = document.getElementById('examDropdown');
+      dropdown.innerHTML = '';
+
+      labs.forEach((lab) => {
+        const option = document.createElement('option');
+        option.value = lab.id;
+        option.textContent = `${lab.name} (${lab.difficulty || 'Medium'})`;
+        option.title = `${lab.description}\nDifficulty: ${
+          lab.difficulty || 'Medium'
+        }\nEstimated Time: ${lab.estimatedTime || '30'} minutes`;
+        dropdown.appendChild(option);
+      });
     }
 
     // Add event listener for View Past Results button
-    viewPastResultsBtn.addEventListener('click', function() {
-        // Check if we have current exam data
-        const currentExamDataStr = localStorage.getItem('currentExamData');
-        
-        if (currentExamDataStr) {
-            try {
-                const currentExamData = JSON.parse(currentExamDataStr);
-                
-                // If the current exam is evaluated or being evaluated, go directly to results
-                if (currentExamData.status === 'EVALUATED' || currentExamData.status === 'EVALUATING') {
-                    window.location.href = `/results?id=${currentExamData.id}`;
-                    return;
-                } else {
-                    // If the exam exists but isn't in the right state, show an alert
-                    alert('Exam results are not available yet. The exam must be evaluated first.');
-                    return;
-                }
-            } catch (error) {
-                console.error('Error parsing current exam data:', error);
-            }
+    viewPastResultsBtn.addEventListener('click', function () {
+      // Check if we have current exam data
+      const currentExamDataStr = localStorage.getItem('currentExamData');
+
+      if (currentExamDataStr) {
+        try {
+          const currentExamData = JSON.parse(currentExamDataStr);
+
+          // If the current exam is evaluated or being evaluated, go directly to results
+          if (
+            currentExamData.status === 'EVALUATED' ||
+            currentExamData.status === 'EVALUATING'
+          ) {
+            window.location.href = `/results?id=${currentExamData.id}`;
+            return;
+          } else {
+            // If the exam exists but isn't in the right state, show an alert
+            alert(
+              'Exam results are not available yet. The exam must be evaluated first.'
+            );
+            return;
+          }
+        } catch (error) {
+          console.error('Error parsing current exam data:', error);
         }
-        
-        // If there's no current exam at all, inform the user
-        alert('No active exam found. Please start an exam first.');
+      }
+
+      // If there's no current exam at all, inform the user
+      alert('No active exam found. Please start an exam first.');
     });
-}); 
+  });
+})();
