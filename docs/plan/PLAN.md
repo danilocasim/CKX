@@ -2,7 +2,7 @@
 
 **Document Type**: Technical Implementation Plan  
 **Status**: Active  
-**Last Updated**: 2026-02-02  
+**Last Updated**: 2026-02-03  
 **Author**: Danilo Jr. B. Casim  
 **Reviewed By**: Senior Software Engineer
 
@@ -12,7 +12,7 @@
 
 This document outlines the complete technical roadmap for transforming CKX from a single-user exam simulator into a scalable multi-user SaaS platform. The plan is divided into sequential phases, each building upon the previous.
 
-**Current Status**: Phases 0-3.5 complete. Authentication and exam types implemented. Ready for Phase 4.
+**Current Status**: Phases 0-4 complete. Payment MVP with Stripe integration implemented. Ready for Phase 5.
 
 **Architecture Decision**: One exam per user at a time. Each user receives an isolated environment (Kubernetes cluster, terminal, desktop). This mirrors real certification exams and optimizes resource utilization.
 
@@ -28,11 +28,11 @@ This document outlines the complete technical roadmap for transforming CKX from 
 | 2 | Session Management API | ✅ Complete | REST API for session operations |
 | 3 | User Authentication | ✅ Complete | PostgreSQL, JWT auth, user accounts, CKX webapp protection |
 | 3.5 | Exam Content Restructuring | ✅ Complete | Mock exams for free trial, type/isFree fields, access control |
-| 4 | Payment MVP | 🔄 **Next** | Mock payment flow, countdown timer, access validation |
-| 4.5 | Stripe Integration | ⏳ Pending | Real payment processing |
-| 5 | Production Deployment | ⏳ Pending | AWS infrastructure, CI/CD |
-| 6 | Scaling & Performance | ⏳ Pending | Cluster pooling, auto-scaling |
-| 7 | Enterprise Features | ⏳ Pending | SSO, teams, LMS integration |
+| 4 | Payment MVP | ✅ Complete | Stripe integration, access passes, countdown timer |
+| 5 | Auth Consolidation | 🔄 **Next** | Move auth/payment UI from sailor-client to CKX |
+| 6 | Production Deployment | ⏳ Pending | AWS infrastructure, CI/CD |
+| 7 | Scaling & Performance | ⏳ Pending | Cluster pooling, auto-scaling |
+| 8 | Enterprise Features | ⏳ Pending | SSO, teams, LMS integration |
 
 ---
 
@@ -142,17 +142,53 @@ DELETE /api/v1/sessions/:id          → Terminate session
 
 ---
 
-## Active Phases
+## Completed Phases (Continued)
 
-### Phase 4: Payment Integration 🔄
+### Phase 4: Payment Integration ✅
 
 **Goal**: Monetize with time-based access passes (not subscriptions).
 
-**Status**: Planning Complete - MVP Ready
+**Status**: Complete
 
 **Depends on**: Phase 3.5 complete ✅
 
-**Reference**: See `PHASE4_PAYMENT_MVP.md` for detailed MVP implementation plan with security analysis.
+**Deliverables**:
+- [x] Stripe checkout integration (one-time payments)
+- [x] Access passes database schema
+- [x] Access service (create, activate, validate passes)
+- [x] Billing controller and routes
+- [x] requireFullAccess middleware (exam creation)
+- [x] requireSessionAccess middleware (during exam)
+- [x] Payment success page
+- [x] Pricing page checkout flow
+- [x] Stripe config validation at startup
+
+**Reference**: See `PHASE4_PAYMENT_MVP.md` and `PHASE4_NOTES.md` for details.
+
+---
+
+## Active Phases
+
+### Phase 5: Complete Auth in CKX 🔄
+
+**Goal**: Build login/register/dashboard in CKX vanilla JS. **Remove sailor-client entirely.**
+
+**Status**: Planning Complete
+
+**Depends on**: Phase 4 complete ✅
+
+**Deliverables**:
+- [ ] Create `auth.js` utilities (token management, auto-refresh)
+- [ ] Create `login.html` and `login.js`
+- [ ] Create `register.html` and `register.js`
+- [ ] Create `dashboard.html` (user stats, exam history, access passes)
+- [ ] Update navigation on all pages
+- [ ] Remove auth redirects to sailor-client
+- [ ] Delete `sailor-client/` directory
+
+**Result**: Single CKX frontend handles everything. No React app needed.
+
+**Reference**: See `PHASE5_AUTH_CONSOLIDATION.md` for detailed plan.
 
 #### 4.1 MVP Approach (Validate Before Stripe)
 
@@ -471,15 +507,15 @@ async function expireOldPasses() {
 
 ---
 
-### Phase 5: Production Deployment ⏳
+### Phase 6: Production Deployment ⏳
 
 **Goal**: Deploy to AWS with production-grade infrastructure.
 
 **Duration**: 2-3 weeks
 
-**Depends on**: Phase 4 complete
+**Depends on**: Phase 5 complete
 
-#### 5.1 Infrastructure Architecture
+#### 6.1 Infrastructure Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -505,7 +541,7 @@ async function expireOldPasses() {
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### 5.2 Infrastructure as Code
+#### 6.2 Infrastructure as Code
 
 Use Terraform for reproducible deployments:
 
@@ -523,7 +559,7 @@ infrastructure/
 └── main.tf
 ```
 
-#### 5.3 CI/CD Pipeline
+#### 6.3 CI/CD Pipeline
 
 GitHub Actions workflow:
 
@@ -545,7 +581,7 @@ jobs:
       - name: Health check
 ```
 
-#### 5.4 Cost Estimate (10 concurrent users)
+#### 6.4 Cost Estimate (10 concurrent users)
 
 | Resource | Specification | Monthly Cost |
 |----------|---------------|--------------|
@@ -558,7 +594,7 @@ jobs:
 
 **Break-even**: 24 Pro subscribers
 
-#### 5.5 Exit Criteria
+#### 6.5 Exit Criteria
 
 - [ ] Terraform provisions all resources
 - [ ] CI/CD deploys on push to main
@@ -568,15 +604,15 @@ jobs:
 
 ---
 
-### Phase 6: Scaling & Performance ⏳
+### Phase 7: Scaling & Performance ⏳
 
 **Goal**: Support 100+ concurrent users with optimal performance.
 
 **Duration**: 4-6 weeks
 
-**Depends on**: Phase 5 complete, production data available
+**Depends on**: Phase 6 complete, production data available
 
-#### 6.1 Cluster Pooling
+#### 7.1 Cluster Pooling
 
 Pre-warm Kubernetes clusters to reduce exam start time:
 
@@ -617,7 +653,7 @@ class ClusterPool {
 
 **Performance Target**: Exam start time < 10 seconds (currently 30-60 seconds)
 
-#### 6.2 Auto-Scaling
+#### 7.2 Auto-Scaling
 
 EC2 Auto Scaling based on active session count:
 
@@ -644,7 +680,7 @@ resource "aws_cloudwatch_metric_alarm" "high_sessions" {
 }
 ```
 
-#### 6.3 Exit Criteria
+#### 7.3 Exit Criteria
 
 - [ ] Cluster pool maintains 3+ warm clusters
 - [ ] Exam start time < 10 seconds
@@ -653,15 +689,15 @@ resource "aws_cloudwatch_metric_alarm" "high_sessions" {
 
 ---
 
-### Phase 7: Enterprise Features ⏳
+### Phase 8: Enterprise Features ⏳
 
 **Goal**: Capture enterprise customers with advanced features.
 
 **Duration**: 8-12 weeks
 
-**Depends on**: Phase 6 complete, B2B demand validated
+**Depends on**: Phase 7 complete, B2B demand validated
 
-#### 7.1 Team Management
+#### 8.1 Team Management
 
 ```sql
 CREATE TABLE organizations (
@@ -678,19 +714,19 @@ CREATE TABLE organization_members (
 );
 ```
 
-#### 7.2 SSO Integration
+#### 8.2 SSO Integration
 
 - SAML 2.0 support (Okta, Azure AD)
 - OAuth 2.0 (Google Workspace)
 - SCIM for user provisioning
 
-#### 7.3 LMS Integration
+#### 8.3 LMS Integration
 
 - LTI 1.3 compliance
 - Grade passback
 - Canvas, Moodle, Blackboard support
 
-#### 7.4 Exit Criteria
+#### 8.4 Exit Criteria
 
 - [ ] Organizations can invite members
 - [ ] Admin dashboard shows team usage
@@ -758,4 +794,4 @@ CREATE TABLE organization_members (
 
 ---
 
-*Last updated: 2026-02-02*
+*Last updated: 2026-02-03*

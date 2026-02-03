@@ -181,6 +181,19 @@ CVC: Any 3 digits (e.g., 123)
 
 ## What's Next
 
+### Phase 5: Auth Consolidation (Next)
+
+Move login/register from sailor-client to CKX vanilla JS app.
+
+See: [PHASE5_AUTH_CONSOLIDATION.md](./PHASE5_AUTH_CONSOLIDATION.md)
+
+**Key Tasks:**
+- [ ] Create login.html + login.js
+- [ ] Create register.html + register.js
+- [ ] Create auth utilities (token management)
+- [ ] Create dashboard.html (user stats, exam history)
+- [ ] Update navigation on all pages
+
 ### Immediate (Required for MVP)
 
 - [ ] Test full payment flow end-to-end
@@ -191,7 +204,6 @@ CVC: Any 3 digits (e.g., 123)
 
 - [ ] Access status display in exam header
 - [ ] Low-time warning toast (< 1 hour remaining)
-- [ ] Pass management page (view/activate passes)
 - [ ] Email notifications for expiring passes
 
 ### Future Enhancements
