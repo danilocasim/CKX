@@ -11,6 +11,7 @@ const redisClient = require('../utils/redisClient');
 const jumphostService = require('./jumphostService');
 const MetricService = require('./metricService');
 const portAllocator = require('./portAllocator');
+const countdownService = require('./countdownService');
 
 // Configuration for multi-session limits
 const MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '10', 10);
@@ -516,6 +517,9 @@ async function endExam(examId) {
     }
 
     logger.info(`Ending exam ${examId}`);
+
+    // Stop countdown timer
+    countdownService.stopCountdown(examId);
 
     // Clean up the exam environment
     try {

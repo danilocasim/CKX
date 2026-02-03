@@ -1,9 +1,10 @@
 # Phase 4: Payment MVP - Access Pass System
 
-**Document Type**: Technical Implementation Plan  
-**Status**: 🔄 In Progress  
-**Date**: 2026-02-02  
-**Author**: Danilo Jr. B. Casim  
+**Document Type**: Technical Implementation Plan
+**Status**: ✅ Implemented
+**Date**: 2026-02-02
+**Last Updated**: 2026-02-03
+**Author**: Danilo Jr. B. Casim
 **Reviewed By**: Senior Software Engineer
 
 ---
@@ -816,14 +817,81 @@ class AuthService {
 
 ## 11. Exit Criteria
 
-- [ ] User can "purchase" mock access pass
-- [ ] Pass activation starts countdown timer
-- [ ] Countdown displayed in UI (cosmetic)
-- [ ] Full exams blocked without valid pass
-- [ ] Access validated server-side on every request
-- [ ] Expired access redirects to pricing page
-- [ ] Security review complete
+- [x] User can "purchase" mock access pass
+- [x] Pass activation starts countdown timer
+- [x] Countdown displayed in UI (via WebSocket - Phase 4.0)
+- [x] Full exams blocked without valid pass
+- [x] Access validated server-side on every request
+- [ ] Expired access redirects to pricing page (client-side pending)
+- [x] Security review complete
 
 ---
 
-_Document created: 2026-02-02. Last updated: 2026-02-02._
+## 12. Implementation Notes (2026-02-03)
+
+### 12.1 Files Created
+
+| File | Purpose |
+|------|---------|
+| `facilitator/migrations/002_access_passes.sql` | Database schema for pass_types and access_passes |
+| `facilitator/src/services/accessService.js` | Core access pass business logic |
+| `facilitator/src/services/stripeService.js` | Stripe one-time payment integration |
+| `facilitator/src/controllers/accessController.js` | Access status and pass management endpoints |
+| `facilitator/src/controllers/billingController.js` | Payment/billing endpoints |
+| `facilitator/src/routes/accessRoutes.js` | Access API routes |
+| `facilitator/src/routes/billingRoutes.js` | Billing API routes |
+| `facilitator/src/middleware/accessMiddleware.js` | `requireFullAccess` middleware |
+| `example.env` | Environment variable template |
+
+### 12.2 Files Modified
+
+| File | Changes |
+|------|---------|
+| `facilitator/package.json` | Added `stripe` dependency |
+| `facilitator/src/config/index.js` | Added Stripe and APP_URL config |
+| `facilitator/src/app.js` | Registered access/billing routes, webhook before JSON parser |
+| `facilitator/src/routes/examRoutes.js` | Added `requireFullAccess` middleware to exam creation |
+| `facilitator/src/controllers/examController.js` | Track exam type and access pass ID |
+| `docker-compose.yaml` | Added Stripe environment variables |
+
+### 12.3 API Endpoints Implemented
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/v1/access/status` | Required | Check current access status |
+| GET | `/api/v1/access/passes` | Required | List user's passes |
+| POST | `/api/v1/access/activate/:id` | Required | Activate a purchased pass |
+| GET | `/api/v1/billing/plans` | Public | List available pass types |
+| POST | `/api/v1/billing/checkout` | Required | Create Stripe checkout session |
+| POST | `/api/v1/billing/webhook` | Public | Handle Stripe webhooks |
+| GET | `/api/v1/billing/verify/:id` | Required | Verify payment completion |
+
+### 12.4 Environment Variables
+
+```bash
+# Required for Stripe integration
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+APP_URL=http://localhost:30080
+```
+
+See `example.env` for full configuration template.
+
+### 12.5 Key Implementation Details
+
+1. **Mock exams bypass access check**: Labs with `isFree: true` or `type: 'mock'` are always accessible
+2. **Auto-activation**: Pending passes are auto-activated when user starts a full exam
+3. **Webhook before JSON parser**: Stripe webhook registered before `express.json()` for signature verification
+4. **Pass stacking**: Future enhancement - currently only one active pass at a time
+
+### 12.6 Remaining Work
+
+- [ ] Client-side integration (pricing page, access status display)
+- [ ] Pass expiration cron job
+- [ ] Email notifications for expiring passes
+- [ ] Payment success/cancel pages
+
+---
+
+_Document created: 2026-02-02. Last updated: 2026-02-03._

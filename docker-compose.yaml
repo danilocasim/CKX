@@ -257,6 +257,11 @@ services:
       - JWT_ACCESS_EXPIRY=15m
       - JWT_REFRESH_EXPIRY=7d
       - BCRYPT_ROUNDS=12
+      # Stripe Payment Configuration (Phase 4)
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - APP_URL=${APP_URL:-http://localhost:30080}
     restart: unless-stopped
     depends_on:
       - jumphost

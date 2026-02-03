@@ -13,6 +13,7 @@ const redisClient = require('../utils/redisClient');
 const logger = require('../utils/logger');
 const remoteDesktopService = require('./remoteDesktopService');
 const MetricService = require('./metricService');
+const countdownService = require('./countdownService');
 
 /**
  * Prepare the exam environment on the jumphost
@@ -94,7 +95,10 @@ async function setupExamEnvironment(examId, nodeCount = 1, sessionPorts = null) 
         examLabState: 'READY'
       }
     });
-    
+
+    // Start countdown timer when exam is READY
+    await countdownService.startCountdown(examId);
+
     return {
       success: true,
       message: 'Exam environment prepared successfully',

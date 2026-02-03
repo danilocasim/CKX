@@ -38,6 +38,16 @@ const config = {
   bcrypt: {
     rounds: parseInt(process.env.BCRYPT_ROUNDS || '12', 10),
   },
+
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY || '',
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+  },
+
+  app: {
+    url: process.env.APP_URL || 'http://localhost:30080',
+  },
 };
 
 module.exports = config; 

@@ -82,22 +82,20 @@ async function createExam(req, res) {
         });
       }
 
-      // Check access control: full exams require authentication
-      const labType = lab.type || 'full';
-      const isAuthenticated = !!req.userId;
-
-      if (labType === 'full' && !isAuthenticated) {
-        return res.status(401).json({
-          error: 'Unauthorized',
-          message: 'Authentication required for full exams. Please login or try a mock exam.'
-        });
-      }
+      // Note: Access control (auth + access pass check) is handled by requireFullAccess middleware
 
       // Merge lab data with request data
       examData = {
         ...lab,
         ...examData,
+        // Track exam type from access middleware
+        examType: req.examType || lab.type || 'full',
       };
+
+      // If user has an access pass, include the pass info for tracking
+      if (req.accessPass) {
+        examData.accessPassId = req.accessPass.passId;
+      }
     } catch (error) {
       logger.error('Failed to load lab data', { error: error.message });
       return res.status(500).json({

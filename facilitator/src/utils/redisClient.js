@@ -19,6 +19,11 @@ const KEYS = {
   // CURRENT_EXAM_ID: 'current-exam-id',
 };
 
+// Redis pub/sub channel for countdown broadcasts (horizontal scaling)
+const CHANNELS = {
+  COUNTDOWN_TICKS: 'countdown:ticks',
+};
+
 // Create Redis client using environment variables
 const redisClient = createClient({
   url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || 6379}`
@@ -413,6 +418,64 @@ async function deleteAllExamData(examId) {
   }
 }
 
+/**
+ * Create a dedicated subscriber client for pub/sub
+ * Redis requires separate connections for subscribe mode
+ * @returns {Promise<Object>} - Returns a new Redis client for subscribing
+ */
+async function createSubscriber() {
+  const subscriber = createClient({
+    url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || 6379}`
+  });
+
+  subscriber.on('error', (err) => {
+    logger.error(`Redis subscriber error: ${err}`);
+  });
+
+  await subscriber.connect();
+  logger.debug('Redis subscriber client connected');
+  return subscriber;
+}
+
+/**
+ * Publish a countdown tick event for horizontal scaling
+ * @param {string} examId - The exam identifier
+ * @param {Object} data - Countdown data to broadcast
+ * @returns {Promise<number>} - Number of subscribers that received the message
+ */
+async function publishCountdownTick(examId, data) {
+  try {
+    const client = await getClient();
+    const message = JSON.stringify({ examId, ...data });
+    return await client.publish(CHANNELS.COUNTDOWN_TICKS, message);
+  } catch (error) {
+    logger.error(`Failed to publish countdown tick: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Subscribe to countdown tick events from other facilitator instances
+ * @param {Function} callback - Function to call with (examId, data) on each tick
+ * @returns {Promise<Object>} - Returns the subscriber client (to unsubscribe later)
+ */
+async function subscribeCountdownTicks(callback) {
+  const subscriber = await createSubscriber();
+
+  await subscriber.subscribe(CHANNELS.COUNTDOWN_TICKS, (message) => {
+    try {
+      const data = JSON.parse(message);
+      const { examId, ...tickData } = data;
+      callback(examId, tickData);
+    } catch (error) {
+      logger.error(`Failed to parse countdown tick message: ${error.message}`);
+    }
+  });
+
+  logger.info('Subscribed to countdown ticks channel');
+  return subscriber;
+}
+
 module.exports = {
   // Connection
   connect,
@@ -448,6 +511,12 @@ module.exports = {
   getActiveSessions,
   getSessionData,
 
+  // Pub/Sub operations (for countdown horizontal scaling)
+  createSubscriber,
+  publishCountdownTick,
+  subscribeCountdownTicks,
+
   // Constants
-  KEYS
+  KEYS,
+  CHANNELS
 }; 

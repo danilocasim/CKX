@@ -2,6 +2,7 @@ const express = require('express');
 const examController = require('../controllers/examController');
 const { validateCreateExam, validateEvaluateExam, validateExamEvents } = require('../middleware/validators');
 const { optionalAuth } = require('../middleware/authMiddleware');
+const { requireFullAccess } = require('../middleware/accessMiddleware');
 
 const router = express.Router();
 
@@ -15,9 +16,9 @@ router.get('/labs', optionalAuth, examController.getLabsList);
 /**
  * @route POST /api/v1/exams
  * @desc Create a new exam
- * @access Public (mock exams) / Authenticated (full exams)
+ * @access Public (mock exams) / Access pass required (full exams)
  */
-router.post('/', optionalAuth, validateCreateExam, examController.createExam);
+router.post('/', optionalAuth, validateCreateExam, requireFullAccess, examController.createExam);
 
 /**
  * @route GET /api/v1/exams/current
