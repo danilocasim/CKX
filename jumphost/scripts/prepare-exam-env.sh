@@ -74,7 +74,18 @@ done
 
 echo "API server is ready"
 
-#Run setup scripts
+# Per-exam namespace isolation: one namespace per session so User A cannot see User B's resources
+EXAM_NAMESPACE="exam-${EXAM_ID}"
+if kubectl get namespace "$EXAM_NAMESPACE" > /dev/null 2>&1; then
+  log "Namespace $EXAM_NAMESPACE already exists (reusing)"
+else
+  kubectl create namespace "$EXAM_NAMESPACE"
+  log "Created namespace $EXAM_NAMESPACE"
+fi
+export EXAM_NAMESPACE
+kubectl config set-context --current --namespace="$EXAM_NAMESPACE"
+
+# Run setup scripts (they receive EXAM_NAMESPACE; use -n $EXAM_NAMESPACE for all kubectl creates/applies)
 for script in "$EXAM_ASSETS_DIR"/scripts/setup/q*_setup.sh; do $script; done
 
 log "Exam environment preparation completed successfully"

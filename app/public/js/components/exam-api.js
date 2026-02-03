@@ -33,7 +33,7 @@ function getExamId() {
 
 // Function to check exam status
 function checkExamStatus(examId) {
-  return apiFetch(`/facilitator/api/v1/exams/${examId}/status`)
+  return apiFetch(`/sailor-client/api/v1/exams/${examId}/status`)
     .then((response) => {
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
@@ -47,7 +47,7 @@ function checkExamStatus(examId) {
 
 // Function to fetch exam data
 function fetchExamData(examId) {
-  const apiUrl = `/facilitator/api/v1/exams/${examId}/questions`;
+  const apiUrl = `/sailor-client/api/v1/exams/${examId}/questions`;
 
   return apiFetch(apiUrl)
     .then((response) => {
@@ -67,15 +67,24 @@ function fetchExamData(examId) {
 
 // Function to fetch current exam information
 function fetchCurrentExamInfo() {
-  return apiFetch('/facilitator/api/v1/exams/current')
+  return apiFetch('/sailor-client/api/v1/exams/current')
     .then((response) => {
       if (!response.ok) {
+        // Return null for 404 (no exam) or other errors
+        if (response.status === 404) {
+          return { success: true, data: null };
+        }
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
       return response.json();
     })
     .then((data) => {
-      return data;
+      // Handle new response format: { success: true, data: null } or { success: true, data: { id, ... } }
+      // Return the exam data directly (or null) for backward compatibility
+      if (data && data.success) {
+        return data.data; // Return null or exam object
+      }
+      return data; // Fallback for old format
     });
 }
 
@@ -96,7 +105,7 @@ function evaluateExam(examId) {
 
 // Function to terminate session
 function terminateSession(examId) {
-  return apiFetch(`/facilitator/api/v1/exams/${examId}/terminate`, {
+  return apiFetch(`/sailor-client/api/v1/exams/${examId}/terminate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -109,9 +118,12 @@ function terminateSession(examId) {
   });
 }
 
-// Function to get VNC info
-function getVncInfo() {
-  return fetch('/api/vnc-info')
+// Function to get VNC info (pass examId for per-exam isolated desktop when available)
+function getVncInfo(examId) {
+  const url = examId
+    ? `/api/vnc-info?examId=${encodeURIComponent(examId)}`
+    : '/api/vnc-info';
+  return fetch(url, { credentials: 'include' })
     .then((response) => response.json())
     .catch((error) => {
       console.error('Error fetching VNC info:', error);
@@ -121,7 +133,7 @@ function getVncInfo() {
 
 // Function to track exam events
 function trackExamEvent(examId, events) {
-  return apiFetch(`/facilitator/api/v1/exams/${examId}/events`, {
+  return apiFetch(`/sailor-client/api/v1/exams/${examId}/events`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -143,7 +155,7 @@ function trackExamEvent(examId, events) {
 
 // Function to submit user feedback
 function submitFeedback(examId, feedbackData) {
-  return apiFetch(`/facilitator/api/v1/exams/metrics/${examId}`, {
+  return apiFetch(`/sailor-client/api/v1/exams/metrics/${examId}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -164,7 +176,7 @@ function submitFeedback(examId, feedbackData) {
 
 // Function to fetch exam answers
 function fetchExamAnswers(examId) {
-  const apiUrl = `/facilitator/api/v1/exams/${examId}/answers`;
+  const apiUrl = `/sailor-client/api/v1/exams/${examId}/answers`;
 
   return apiFetch(apiUrl)
     .then((response) => {

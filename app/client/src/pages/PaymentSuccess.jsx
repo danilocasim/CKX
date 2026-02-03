@@ -46,7 +46,7 @@ export default function PaymentSuccess() {
       setErrorMessage('Please log in to verify your payment');
       return;
     }
-    fetchWithAuth(`/facilitator/api/v1/billing/verify/${sessionId}`)
+    fetchWithAuth(`/sailor-client/api/v1/billing/verify/${sessionId}`)
       .then((r) => r.json())
       .then((data) => {
         if (!data.data) {

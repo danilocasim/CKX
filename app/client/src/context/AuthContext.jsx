@@ -21,7 +21,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(
     async (email, password) => {
-      const response = await fetch('/facilitator/api/v1/auth/login', {
+      const response = await fetch('/sailor-client/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -43,7 +43,7 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(
     async (email, password, displayName) => {
-      const response = await fetch('/facilitator/api/v1/auth/register', {
+      const response = await fetch('/sailor-client/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -70,7 +70,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     const refreshToken = getRefreshToken();
     try {
-      await fetch('/facilitator/api/v1/auth/logout', {
+      await fetch('/sailor-client/api/v1/auth/logout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
@@ -85,7 +85,7 @@ export function AuthProvider({ children }) {
     const refreshToken = getRefreshToken();
     if (!refreshToken) return false;
     try {
-      const response = await fetch('/facilitator/api/v1/auth/refresh', {
+      const response = await fetch('/sailor-client/api/v1/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
@@ -132,7 +132,7 @@ export function AuthProvider({ children }) {
 
   const getUser = useCallback(async () => {
     if (!getToken()) return null;
-    const response = await fetchWithAuth('/facilitator/api/v1/users/me');
+    const response = await fetchWithAuth('/sailor-client/api/v1/users/me');
     if (!response.ok) return null;
     const data = await response.json();
     return data.data || null;

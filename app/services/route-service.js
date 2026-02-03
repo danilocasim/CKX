@@ -1,6 +1,12 @@
 const path = require('path');
 const fs = require('fs');
 
+const facilitatorBaseUrl =
+  process.env.FACILITATOR_URL ||
+  (fs.existsSync && fs.existsSync('/.dockerenv')
+    ? 'http://facilitator:3000'
+    : 'http://localhost:3001');
+
 class RouteService {
   constructor(publicService, vncService, authService) {
     this.publicService = publicService;
@@ -9,9 +15,36 @@ class RouteService {
   }
 
   setupRoutes(app) {
-    // API endpoint to get VNC server info
-    app.get('/api/vnc-info', (req, res) => {
-      res.json(this.vncService.getVNCInfo());
+    // API endpoint to get VNC server info (optionally per-exam routing when examId provided)
+    app.get('/api/vnc-info', async (req, res) => {
+      const examId = req.query.examId;
+      const token = req.cookies && req.cookies.ckx_token;
+      const base = this.vncService.getVNCInfo();
+      if (!examId || !token) {
+        return res.json({ ...base, useShared: true });
+      }
+      try {
+        const r = await fetch(
+          `${facilitatorBaseUrl.replace(
+            /\/$/,
+            ''
+          )}/api/v1/remote-desktop/routing/${examId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!r.ok) return res.json({ ...base, useShared: true });
+        const data = await r.json();
+        if (data.useShared || !data.vnc)
+          return res.json({ ...base, useShared: true });
+        res.json({
+          ...base,
+          useShared: false,
+          vncHost: data.vnc.host,
+          vncPort: data.vnc.port,
+          proxyUrl: `/vnc-proxy/?examId=${encodeURIComponent(examId)}`,
+        });
+      } catch (e) {
+        res.json({ ...base, useShared: true });
+      }
     });
 
     // Health check endpoint

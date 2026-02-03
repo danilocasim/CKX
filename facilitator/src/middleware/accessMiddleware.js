@@ -139,12 +139,13 @@ async function checkAccess(req, res, next) {
 
 /**
  * Middleware to enforce session ownership.
- * Fetches exam only by (examId + userId); never by examId alone (no cross-user data).
+ * STRICT ISOLATION: Validates ownership using exam_sessions table (Sailor-Client owns this).
+ * Never trusts Redis - only PostgreSQL exam_sessions table.
  * - Returns 404 if exam not found or not owned (do not leak existence).
  * - Sets req.examInfo for downstream use.
  */
 async function requireExamOwnership(req, res, next) {
-  const examId = req.params.examId;
+  const examId = req.params.examId; // This should be exam_session_id from Sailor-Client
   const userId = req.userId;
 
   if (!examId) {
@@ -155,19 +156,48 @@ async function requireExamOwnership(req, res, next) {
     });
   }
 
+  // STRICT ISOLATION: Check exam_sessions table (Sailor-Client owns this)
+  // Never trust Redis - only PostgreSQL exam_sessions table
   try {
-    const examInfo = await redisClient.getExamInfoForUser(examId, userId);
-    if (!examInfo) {
+    const db = require('../utils/db');
+    const result = await db.query(
+      `SELECT * FROM exam_sessions 
+       WHERE id = $1 AND user_id = $2 AND status = 'active' AND expires_at > NOW()`,
+      [examId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      logger.warn(
+        'ISOLATION BREACH PREVENTED: Exam session not found or not owned',
+        {
+          examId,
+          userId,
+        }
+      );
       return res.status(404).json({
         success: false,
         error: 'Not Found',
         message: 'Exam not found',
       });
     }
-    req.examInfo = examInfo;
+
+    const examSession = result.rows[0];
+    req.examInfo = {
+      id: examSession.id,
+      exam_session_id: examSession.id,
+      user_id: examSession.user_id,
+      lab_id: examSession.lab_id,
+      exam_type: examSession.exam_type,
+      status: examSession.status,
+      expires_at: examSession.expires_at,
+    };
     next();
   } catch (error) {
-    logger.error('Ownership check failed', { error: error.message, examId });
+    logger.error('Ownership check failed', {
+      error: error.message,
+      examId,
+      userId,
+    });
     return res.status(500).json({
       success: false,
       error: 'Error',
@@ -206,47 +236,21 @@ async function requireSessionAccess(req, res, next) {
     req.examInfo = examInfo;
 
     // Mock exams bypass access validation
-    if (examInfo.examType === 'mock' || examInfo.isFree) {
+    if (examSession.exam_type === 'mock' || examSession.exam_type === 'mock') {
       logger.debug('Mock exam session - access check bypassed', { examId });
       return next();
     }
 
-    // Full exams require valid access pass
-    const accessPassId = examInfo.accessPassId;
+    // Full exams: Check access pass (Sailor-Client owns this logic)
+    // Note: Access pass validation is handled by Sailor-Client before creating exam_session
+    // CKX only enforces expires_at (time enforcement)
+    // If we reach here, the session exists and belongs to the user, so allow access
+    logger.debug('Full exam session - access validated by Sailor-Client', {
+      examId,
+      userId,
+      expires_at: examSession.expires_at,
+    });
 
-    if (!accessPassId) {
-      // Legacy exam without access pass tracking - allow for now
-      logger.warn('Full exam without accessPassId - allowing (legacy)', {
-        examId,
-      });
-      return next();
-    }
-
-    // Validate the access pass is still valid
-    const passValid = await accessService.validatePassById(accessPassId);
-
-    if (!passValid.isValid) {
-      logger.info('Session access denied - pass expired or invalid', {
-        examId,
-        accessPassId,
-        reason: passValid.reason,
-      });
-
-      return res.status(403).json({
-        success: false,
-        error: 'Access Expired',
-        message:
-          passValid.reason ||
-          'Your access pass has expired. Please purchase a new pass to continue.',
-        data: {
-          expired: true,
-          pricing: '/pricing',
-        },
-      });
-    }
-
-    // Attach access info for logging
-    req.accessPass = passValid;
     next();
   } catch (error) {
     logger.error('Session access check failed', {

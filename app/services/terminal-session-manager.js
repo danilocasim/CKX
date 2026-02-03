@@ -1,7 +1,7 @@
 /**
  * Terminal Session Manager
- * Runtime isolation: SSH connections are keyed by terminal_session.id (UUID), not examId.
- * One terminal session = one user = one SSH connection. No shared TTY, stream, or workspace.
+ * Runtime isolation: one SSH shell per connection (per socket.id).
+ * Key = terminalSessionId:socket.id so User A and User B never share a TTY even if session IDs collided.
  */
 
 const { Client } = require('ssh2');
@@ -13,20 +13,21 @@ const facilitatorUrl =
     ? 'http://facilitator:3000'
     : 'http://localhost:3001');
 
-// terminalSessionId (UUID) -> { ssh, stream, sockets: Set }
-// Never key by examId; each user has their own terminal session id and thus their own SSH runtime.
+// runtimeKey (terminalSessionId:socket.id) -> { ssh, stream, socket }
+// One SSH connection per browser connection so no cross-user or cross-tab sharing.
 const runtimes = new Map();
 
 /**
  * Validate terminal attach with facilitator (server-side).
  * Requires terminalSessionId + examId + token. Ensures terminal_session.user_id === user and exam_session_id === examId.
+ * Returns validation result and optional sshHost/sshPort for isolated runtime.
  * @param {string} terminalSessionId - Terminal session UUID
  * @param {string} examId - Exam session ID
  * @param {string} token - JWT access token
- * @returns {Promise<boolean>}
+ * @returns {Promise<{ valid: boolean, sshHost?: string, sshPort?: number }>}
  */
 async function validateWithFacilitator(terminalSessionId, examId, token) {
-  if (!terminalSessionId || !examId || !token) return false;
+  if (!terminalSessionId || !examId || !token) return { valid: false };
   try {
     const url =
       `${facilitatorUrl}/api/v1/terminal/validate?` +
@@ -35,50 +36,48 @@ async function validateWithFacilitator(terminalSessionId, examId, token) {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return false;
+    if (!res.ok) return { valid: false };
     const data = await res.json();
-    return data.success === true && data.data?.valid === true;
+    const valid = data.success === true && data.data?.valid === true;
+    if (!valid) return { valid: false };
+    return {
+      valid: true,
+      sshHost: data.data.sshHost || undefined,
+      sshPort: data.data.sshPort != null ? data.data.sshPort : undefined,
+    };
   } catch (err) {
     console.error('Terminal validate error', err.message);
-    return false;
+    return { valid: false };
   }
 }
 
 /**
- * Attach a client socket to the SSH runtime for this terminal session only.
- * Keyed by terminalSessionId so User A never attaches to User B's runtime.
+ * Attach a client socket to a dedicated SSH runtime for this connection only.
+ * Key = terminalSessionId:socket.id so each connection gets its own shell (no cross-user or cross-tab sharing).
  * @param {string} terminalSessionId - Terminal session UUID (from facilitator)
  * @param {object} socket - Socket.io socket
  * @param {object} sshConfig - { host, port, username, password }
  */
 function addSocket(terminalSessionId, socket, sshConfig) {
-  let entry = runtimes.get(terminalSessionId);
+  const runtimeKey = `${terminalSessionId}:${socket.id}`;
+  let entry = runtimes.get(runtimeKey);
   if (!entry) {
-    entry = { ssh: null, stream: null, sockets: new Set() };
-    runtimes.set(terminalSessionId, entry);
+    entry = { ssh: null, stream: null, socket };
+    runtimes.set(runtimeKey, entry);
   }
-  entry.sockets.add(socket);
-
-  const broadcast = (data) => {
-    const str = typeof data === 'string' ? data : data.toString('utf8');
-    entry.sockets.forEach((s) => {
-      if (s.connected) s.emit('data', str);
-    });
-  };
 
   const cleanup = () => {
-    entry.sockets.delete(socket);
-    if (entry.sockets.size === 0) {
-      if (entry.stream)
-        try {
-          entry.stream.close();
-        } catch (_) {}
-      if (entry.ssh)
-        try {
-          entry.ssh.end();
-        } catch (_) {}
-      runtimes.delete(terminalSessionId);
+    if (entry.stream) {
+      try {
+        entry.stream.close();
+      } catch (_) {}
     }
+    if (entry.ssh) {
+      try {
+        entry.ssh.end();
+      } catch (_) {}
+    }
+    runtimes.delete(runtimeKey);
   };
 
   socket.on('disconnect', cleanup);
@@ -101,31 +100,56 @@ function addSocket(terminalSessionId, socket, sshConfig) {
   conn.on('ready', () => {
     conn.shell((err, stream) => {
       if (err) {
-        broadcast(`SSH shell error: ${err.message}\r\n`);
-        entry.sockets.forEach((s) => s.disconnect(true));
-        runtimes.delete(terminalSessionId);
+        socket.emit('data', `SSH shell error: ${err.message}\r\n`);
+        socket.disconnect(true);
+        runtimes.delete(runtimeKey);
         return;
       }
       entry.stream = stream;
-      stream.on('data', (data) => broadcast(data));
+      stream.on('data', (data) => {
+        if (socket.connected)
+          socket.emit(
+            'data',
+            typeof data === 'string' ? data : data.toString('utf8')
+          );
+      });
       stream.on('close', () => {
-        entry.sockets.forEach((s) => s.disconnect(true));
-        runtimes.delete(terminalSessionId);
+        socket.disconnect(true);
+        runtimes.delete(runtimeKey);
       });
       stream.on('error', (err) => {
-        broadcast(`Error: ${err.message}\r\n`);
+        if (socket.connected) socket.emit('data', `Error: ${err.message}\r\n`);
       });
     });
   });
 
   conn.on('error', (err) => {
-    broadcast(`SSH connection error: ${err.message}\r\n`);
-    entry.sockets.forEach((s) => s.disconnect(true));
-    runtimes.delete(terminalSessionId);
+    if (socket.connected)
+      socket.emit('data', `SSH connection error: ${err.message}\r\n`);
+    socket.disconnect(true);
+    runtimes.delete(runtimeKey);
   });
 
+  // STRICT ISOLATION: Never use shared 'remote-terminal' - must have dedicated host
+  if (!sshConfig.host || sshConfig.host === 'remote-terminal') {
+    console.error(
+      'ISOLATION BREACH PREVENTED: Attempted to use shared SSH host',
+      {
+        terminalSessionId,
+        sshHost: sshConfig.host,
+      }
+    );
+    socket.emit(
+      'data',
+      '\r\n\x1b[1;31m[ERROR]\x1b[0m Dedicated terminal runtime required but not available.\r\n'
+    );
+    socket.disconnect(true);
+    runtimes.delete(runtimeKey);
+    return;
+  }
+
   conn.connect({
-    host: sshConfig.host || 'remote-terminal',
+    host: sshConfig.host,
     port: sshConfig.port || 22,
     username: sshConfig.username || 'candidate',
     password: sshConfig.password || 'password',

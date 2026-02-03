@@ -24,7 +24,7 @@ export default function Dashboard() {
           setUserName(user.displayName || user.email || 'User');
 
         const statusRes = await fetchWithAuth(
-          '/facilitator/api/v1/access/status'
+          '/sailor-client/api/v1/access/status'
         );
         if (!cancelled && statusRes.ok) {
           const statusData = await statusRes.json();
@@ -48,7 +48,7 @@ export default function Dashboard() {
         }
 
         const statsRes = await fetchWithAuth(
-          '/facilitator/api/v1/users/me/stats'
+          '/sailor-client/api/v1/users/me/stats'
         );
         if (!cancelled && statsRes.ok) {
           const statsData = await statsRes.json();
@@ -59,7 +59,7 @@ export default function Dashboard() {
         }
 
         const examsRes = await fetchWithAuth(
-          '/facilitator/api/v1/users/me/exams'
+          '/sailor-client/api/v1/users/me/exams'
         );
         if (!cancelled && examsRes.ok) {
           const examsData = await examsRes.json();

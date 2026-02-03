@@ -6,8 +6,9 @@ const {
   validateExamEvents,
 } = require('../middleware/validators');
 const { optionalAuth } = require('../middleware/authMiddleware');
+// REMOVED: requireFullAccess - payment/access validation moved to Sailor-Client
+// CKX no longer validates payments or access passes - it only trusts Sailor-Client
 const {
-  requireFullAccess,
   requireSessionAccess,
   requireExamOwnership,
 } = require('../middleware/accessMiddleware');
@@ -18,6 +19,7 @@ const router = express.Router();
  * @route GET /api/v1/exams/labs
  * @desc Get list of available labs
  * @access Public (mock exams) / Authenticated (full exams)
+ * @deprecated Use Sailor-Client /api/v1/exams/labs instead
  */
 router.get('/labs', optionalAuth, examController.getLabsList);
 
@@ -25,12 +27,16 @@ router.get('/labs', optionalAuth, examController.getLabsList);
  * @route POST /api/v1/exams
  * @desc Create a new exam (one active exam per user)
  * @access Public (mock exams) / Access pass required (full exams)
+ * @deprecated Use Sailor-Client /api/v1/exams instead (calls CKX /internal/exams/start)
  */
+// DEPRECATED: This route is kept for backward compatibility only
+// Sailor-Client handles exam creation and calls CKX /internal/exams/start
+// CKX no longer validates payments or access - it trusts Sailor-Client
 router.post(
   '/',
   optionalAuth,
   validateCreateExam,
-  requireFullAccess,
+  // REMOVED: requireFullAccess - payment validation moved to Sailor-Client
   examController.createExam
 );
 

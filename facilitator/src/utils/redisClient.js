@@ -313,8 +313,12 @@ async function getExamInfoForUser(examId, userId) {
     if (!data) return null;
     const examInfo = JSON.parse(data);
     const examUserId = examInfo.userId;
+    // Strict ownership: only return exam if it belongs to this user (or both are anonymous)
     if (examUserId != null && examUserId !== '') {
       if (userId == null || String(userId) !== String(examUserId)) return null;
+    } else {
+      // Exam has no owner (anonymous): do not return to authenticated users (no cross-user access)
+      if (userId != null && userId !== '') return null;
     }
     // Session is invalid if past expires_at
     const expiresAt = examInfo.expiresAt || examInfo.expires_at;

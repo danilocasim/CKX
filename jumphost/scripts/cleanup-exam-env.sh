@@ -19,6 +19,17 @@ log() {
 }
 
 log "Starting exam environment cleanup"
+
+# Remove per-exam namespace so User A's resources are not visible to others after cleanup
+export KUBECONFIG="${KUBECONFIG:-/home/candidate/.kube/kubeconfig}"
+if [ -n "$EXAM_ID" ]; then
+  EXAM_NAMESPACE="exam-${EXAM_ID}"
+  if kubectl get namespace "$EXAM_NAMESPACE" 2>/dev/null; then
+    log "Deleting exam namespace $EXAM_NAMESPACE"
+    kubectl delete namespace "$EXAM_NAMESPACE" --ignore-not-found=true --timeout=60s || true
+  fi
+fi
+
 log "Cleaning up cluster $CLUSTER_NAME"
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null candidate@k8s-api-server "env-cleanup $CLUSTER_NAME"
 

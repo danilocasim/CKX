@@ -95,6 +95,11 @@ function initTerminal(containerElement, isActive = false) {
   return { terminal, fitAddon };
 }
 
+// Reconnect using current connection context (e.g. after switching to terminal tab with fresh session)
+function reconnect() {
+  connectToSocketIO();
+}
+
 // Resize terminal to fit container
 function resizeTerminal(containerElement) {
   if (!terminal || !isTerminalInitialized) return;
@@ -149,11 +154,16 @@ function connectToSSH() {
   connectToSocketIO();
 }
 
-// Connect to Socket.io (requires terminalSessionId + examId + token; runtime keyed by terminalSessionId only)
+// Connect to Socket.io (requires terminalSessionId + examId + token; one SSH per connection)
 function connectToSocketIO() {
-  if (socket && socket.connected) {
-    console.log('Socket already connected, skipping reconnection');
-    return;
+  // Tear down any existing connection so we always use current context (no cross-user/tab reuse)
+  if (socket) {
+    socket.off('data');
+    socket.off('connect');
+    socket.off('disconnect');
+    socket.off('error');
+    socket.disconnect();
+    socket = null;
   }
 
   const examId = connectionContext.examId;
@@ -171,14 +181,6 @@ function connectToSocketIO() {
       );
     }
     return;
-  }
-
-  if (socket) {
-    socket.off('data');
-    socket.off('connect');
-    socket.off('disconnect');
-    socket.off('error');
-    socket.disconnect();
   }
 
   socket = io('/ssh', {
@@ -309,6 +311,7 @@ export {
   initTerminal,
   resizeTerminal,
   connectToSSH,
+  reconnect,
   isInitialized,
   getTerminal,
   getSocket,

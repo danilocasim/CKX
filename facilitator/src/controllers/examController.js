@@ -82,32 +82,16 @@ async function createExam(req, res) {
         });
       }
 
-      // Note: Access control (auth + access pass check) is handled by requireFullAccess middleware
+      // DEPRECATED: This endpoint is kept for backward compatibility only
+      // Sailor-Client handles access validation and calls CKX /internal/exams/start
+      // CKX no longer validates payments or access passes
 
       // Merge lab data with request data
       examData = {
         ...lab,
         ...examData,
-        // Track exam type from access middleware
-        examType: req.examType || lab.type || 'full',
+        examType: lab.type || 'full',
       };
-
-      // If user has an access pass, include the pass info for tracking and session expiry
-      if (req.accessPass) {
-        examData.accessPassId = req.accessPass.passId;
-        examData.startedAt = new Date().toISOString();
-        examData.expiresAt = req.accessPass.expiresAt
-          ? new Date(req.accessPass.expiresAt).toISOString()
-          : null;
-        const start = new Date(examData.startedAt).getTime();
-        const end = examData.expiresAt
-          ? new Date(examData.expiresAt).getTime()
-          : start + 2 * 3600 * 1000;
-        examData.totalAllocatedSeconds = Math.max(
-          0,
-          Math.floor((end - start) / 1000)
-        );
-      }
     } catch (error) {
       logger.error('Failed to load lab data', { error: error.message });
       return res.status(500).json({
@@ -375,22 +359,27 @@ async function getExamAnswers(req, res) {
  */
 async function getExamStatus(req, res) {
   const examId = req.params.examId;
+  const examInfo = req.examInfo; // Set by requireExamOwnership middleware (validated ownership)
 
-  logger.info('Received request to get exam status', { examId });
+  logger.info('Received request to get exam status', {
+    examId,
+    userId: req.userId,
+  });
 
   try {
-    // Check if exam exists
-    const examInfo = await redisClient.getExamInfo(examId);
-    //get exam status form redis
-    const examStatus = await redisClient.getExamStatus(examId);
-
+    // Use examInfo from middleware (already validated ownership)
     if (!examInfo) {
-      logger.error(`Exam not found with ID: ${examId}`);
+      logger.error(
+        `Exam not found with ID: ${examId} (ownership check failed)`
+      );
       return res.status(404).json({
         error: 'Not Found',
         message: 'Exam not found',
       });
     }
+
+    // Get exam status from redis
+    const examStatus = await redisClient.getExamStatus(examId);
 
     // Return the exam status and any additional info
     return res.status(200).json({
@@ -403,7 +392,10 @@ async function getExamStatus(req, res) {
           : 'Exam environment is being prepared',
     });
   } catch (error) {
-    logger.error('Error retrieving exam status', { error: error.message });
+    logger.error('Error retrieving exam status', {
+      error: error.message,
+      examId,
+    });
     return res.status(500).json({
       error: 'Failed to retrieve exam status',
       message: error.message,

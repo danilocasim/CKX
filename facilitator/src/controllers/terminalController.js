@@ -5,6 +5,7 @@
  */
 
 const terminalSessionService = require('../services/terminalSessionService');
+const runtimeSessionService = require('../services/runtimeSessionService');
 const logger = require('../utils/logger');
 
 /**
@@ -63,6 +64,27 @@ async function validateTerminalAccess(req, res) {
       user_id: userId,
     });
 
+    const routing = await runtimeSessionService.getRoutingForUser(
+      examId,
+      userId
+    );
+    const sshHost = routing?.ssh?.host || null;
+    const sshPort = routing?.ssh?.port ?? null;
+
+    // STRICT ISOLATION: Authenticated users must have dedicated SSH target — never fall back to shared
+    if (userId != null && (!sshHost || sshPort == null)) {
+      logger.warn(
+        'ISOLATION BREACH PREVENTED: No dedicated SSH routing for authenticated user',
+        { examId, userId, terminal_session_id: session.id }
+      );
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden',
+        message:
+          'Dedicated terminal runtime is required but unavailable. Please end this exam and try again.',
+      });
+    }
+
     return res.status(200).json({
       success: true,
       data: {
@@ -70,6 +92,8 @@ async function validateTerminalAccess(req, res) {
         terminalSessionId: session.id,
         examSessionId: examId,
         expiresAt: session.expires_at,
+        sshHost,
+        sshPort,
       },
     });
   } catch (error) {
@@ -91,9 +115,10 @@ async function validateTerminalAccess(req, res) {
  * Get terminal session for an exam (owner only).
  * GET /api/v1/terminal/session/:examId
  * Uses requireExamOwnership so examId + userId are validated.
+ * STRICT ISOLATION: Validates ownership from exam_sessions table.
  */
 async function getTerminalSession(req, res) {
-  const examId = req.params.examId;
+  const examId = req.params.examId; // This should be exam_session_id from Sailor-Client
   const userId = req.userId;
 
   if (!userId) {
@@ -105,6 +130,29 @@ async function getTerminalSession(req, res) {
   }
 
   try {
+    // STRICT ISOLATION: Validate ownership from exam_sessions table first
+    const db = require('../utils/db');
+    const examResult = await db.query(
+      `SELECT * FROM exam_sessions 
+       WHERE id = $1 AND user_id = $2 AND status = 'active' AND expires_at > NOW()`,
+      [examId, userId]
+    );
+
+    if (examResult.rows.length === 0) {
+      logger.warn(
+        'ISOLATION BREACH PREVENTED: Terminal session access denied - user does not own exam session',
+        {
+          examId,
+          userId,
+        }
+      );
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden',
+        message: 'You do not have access to this exam session.',
+      });
+    }
+
     const session = await terminalSessionService.validateAccess(examId, userId);
     if (!session) {
       return res.status(404).json({
@@ -114,6 +162,13 @@ async function getTerminalSession(req, res) {
       });
     }
 
+    const routing = await runtimeSessionService.getRoutingForUser(
+      examId,
+      userId
+    );
+    const sshHost = routing?.ssh?.host || null;
+    const sshPort = routing?.ssh?.port ?? null;
+
     return res.status(200).json({
       success: true,
       data: {
@@ -122,12 +177,15 @@ async function getTerminalSession(req, res) {
         status: session.status,
         startedAt: session.started_at,
         expiresAt: session.expires_at,
+        sshHost,
+        sshPort,
       },
     });
   } catch (error) {
     logger.error('Get terminal session failed', {
       error: error.message,
       examId,
+      userId,
     });
     return res.status(500).json({
       success: false,

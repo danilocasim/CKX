@@ -20,8 +20,13 @@ COPY . .
 RUN mkdir -p logs
 
 # Create a non-root user and switch to it
+# Note: Docker socket access requires docker group membership
+# The docker group GID will be set via docker-compose user override
+# We create the docker group here, but the actual GID will match the host's docker group
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodeuser -u 1001 -G nodejs
+    addgroup -g 995 -S docker || addgroup -g 999 -S docker || true && \
+    adduser -S nodeuser -u 1001 -G nodejs && \
+    adduser nodeuser docker || true
 
 # Setup SSH for passwordless authentication
 RUN mkdir -p /home/nodeuser/.ssh && \
@@ -43,6 +48,8 @@ COPY entrypoint.sh /home/nodeuser/entrypoint.sh
 RUN chmod +x /home/nodeuser/entrypoint.sh
 
 # Switch to non-root user
+# Note: For Docker socket access, we may need to run as root or with docker group GID
+# This will be handled via docker-compose user override
 USER nodeuser
 
 ENTRYPOINT ["/bin/sh", "/home/nodeuser/entrypoint.sh"]

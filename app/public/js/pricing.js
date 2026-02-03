@@ -2,7 +2,7 @@
  * CK-X Pricing Page JavaScript
  */
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   // Check authentication status
   checkAuthStatus();
 
@@ -19,12 +19,13 @@ async function checkAuthStatus() {
   const token = localStorage.getItem('accessToken');
   if (!token) return;
   try {
-    const response = await fetch('/facilitator/api/v1/users/me', {
-      headers: { 'Authorization': `Bearer ${token}` }
+    const response = await fetch('/sailor-client/api/v1/users/me', {
+      headers: { Authorization: `Bearer ${token}` },
     });
     if (response.ok && loginBtn) {
       const data = await response.json();
-      loginBtn.textContent = data.data.displayName || data.data.email.split('@')[0];
+      loginBtn.textContent =
+        data.data.displayName || data.data.email.split('@')[0];
       loginBtn.href = '/dashboard';
       loginBtn.classList.remove('btn-login');
       loginBtn.classList.add('btn-profile');
@@ -44,7 +45,7 @@ function initializeButtons() {
   // Try Free button
   const tryFreeBtn = document.querySelector('.btn-try');
   if (tryFreeBtn) {
-    tryFreeBtn.addEventListener('click', function() {
+    tryFreeBtn.addEventListener('click', function () {
       // Redirect to home page to try mock exam
       window.location.href = '/?mock=true';
     });
@@ -52,8 +53,8 @@ function initializeButtons() {
 
   // Buy buttons
   const buyButtons = document.querySelectorAll('.btn-buy');
-  buyButtons.forEach(btn => {
-    btn.addEventListener('click', function(e) {
+  buyButtons.forEach((btn) => {
+    btn.addEventListener('click', function (e) {
       e.preventDefault();
 
       // Check if user is logged in
@@ -95,13 +96,13 @@ function showAuthModal() {
 async function initiateCheckout(passTypeId) {
   try {
     const token = localStorage.getItem('accessToken');
-    const response = await fetch('/facilitator/api/v1/billing/checkout', {
+    const response = await fetch('/sailor-client/api/v1/billing/checkout', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ passTypeId })
+      body: JSON.stringify({ passTypeId }),
     });
 
     if (response.ok) {
@@ -145,7 +146,7 @@ const usersCount = document.getElementById('usersCount');
 if (usersCount) {
   // Start animation when element is in view
   const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
+    entries.forEach((entry) => {
       if (entry.isIntersecting) {
         animateCounter(usersCount, 2500, 1500);
         observer.unobserve(entry.target);

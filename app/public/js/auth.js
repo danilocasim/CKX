@@ -19,7 +19,7 @@ const Auth = {
   isAuthenticated: () => !!localStorage.getItem('accessToken'),
 
   async login(email, password) {
-    const response = await fetch('/facilitator/api/v1/auth/login', {
+    const response = await fetch('/sailor-client/api/v1/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -43,7 +43,7 @@ const Auth = {
   },
 
   async register(email, password, displayName) {
-    const response = await fetch('/facilitator/api/v1/auth/register', {
+    const response = await fetch('/sailor-client/api/v1/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -89,7 +89,7 @@ const Auth = {
     const refreshToken = this.getRefreshToken();
     if (!refreshToken) return false;
     try {
-      const response = await fetch('/facilitator/api/v1/auth/refresh', {
+      const response = await fetch('/sailor-client/api/v1/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
@@ -110,7 +110,7 @@ const Auth = {
 
   async getUser() {
     if (!this.getToken()) return null;
-    const response = await this.fetch('/facilitator/api/v1/users/me');
+    const response = await this.fetch('/sailor-client/api/v1/users/me');
     if (!response.ok) return null;
     const data = await response.json();
     return data.data || null;

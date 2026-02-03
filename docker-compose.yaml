@@ -71,6 +71,7 @@ services:
       - remote-desktop
       - remote-terminal
       - facilitator
+      - sailor-client
       - k8s-api-server
     ports:
       - '30080:80' # Expose Nginx on port 30080
@@ -225,7 +226,63 @@ services:
       timeout: 5s
       retries: 5
 
-  # Facilitator Service
+  # Sailor-Client (Control Plane)
+  sailor-client:
+    build:
+      context: ./sailor-client
+      dockerfile: Dockerfile
+    hostname: sailor-client
+    volumes:
+      # Mount facilitator assets so Sailor-Client can read labs.json
+      - ./facilitator/assets:/app/facilitator/assets:ro
+    ports:
+      - '4001:4000' # Expose for local development
+    expose:
+      - '4000'
+    environment:
+      - PORT=4000
+      - NODE_ENV=prod
+      # PostgreSQL Configuration (shared with facilitator)
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-ckx}
+      - POSTGRES_USER=${POSTGRES_USER:-ckx}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ckx-dev-password}
+      # JWT Configuration
+      - JWT_SECRET=${JWT_SECRET:-ckx-jwt-secret-change-in-production}
+      - JWT_ACCESS_EXPIRY=15m
+      - JWT_REFRESH_EXPIRY=7d
+      - BCRYPT_ROUNDS=12
+      # CKX Execution Engine (internal APIs)
+      - CKX_URL=http://facilitator:3000
+      - CKX_SERVICE_SECRET=${SAILOR_CLIENT_SECRET:-change-me-in-production}
+      # Stripe Payment Configuration
+      - STRIPE_SECRET_KEY=sk_test_51SknIFK4C8jOyCJwb0zidigdDwTKxWMx7wDlDlmdgbkwsdbzX2HkXp8W6KX2Vtq94zBqGk6kjTbpBLpQmvq3fs1W00PgK3O5di
+      - STRIPE_PUBLISHABLE_KEY=pk_test_51SknIFK4C8jOyCJwoWDcL78m3LGYVrjcPnOr6yGQtDiG4B0xmibdX9wJ3Tj2QgcrWZl3ilLROdEDRumhaaIgZfh700HXUuPsxl
+      - STRIPE_WEBHOOK_SECRET=whsec_338e054c19cddacf9595e8098557021197a6921e8fa1966dfa66f2e9c09a91e4
+      - APP_URL=${APP_URL:-http://localhost:30080}
+      - LOG_LEVEL=info
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - facilitator
+    networks:
+      - ckx-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.2'
+          memory: 256M
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '-', 'http://localhost:4000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Facilitator Service (CKX Execution Engine)
   facilitator:
     image: nishanb/ck-x-simulator-facilitator:latest
     build:
@@ -247,6 +304,14 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - TRACK_METRICS=true # based on the environment variable TRACK_METRICS, the facilitator will send metrics to the metric server
+      # Runtime isolation: Always spawn per-user containers for authenticated users (strict isolation)
+      # Set SESSION_MODE=ISOLATED to enable (default SHARED for backward compat, but authenticated users always get isolated containers)
+      - SESSION_MODE=${SESSION_MODE:-SHARED}
+      - DOCKER_NETWORK=ckx-network
+      - DOCKER_SOCKET=/var/run/docker.sock
+      # Service authentication (for Sailor-Client → CKX internal APIs)
+      - SAILOR_CLIENT_SECRET=${SAILOR_CLIENT_SECRET:-change-me-in-production}
+      - SERVICE_SECRET=${SAILOR_CLIENT_SECRET:-change-me-in-production}
       # PostgreSQL Configuration
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
@@ -263,6 +328,17 @@ services:
       - STRIPE_PUBLISHABLE_KEY=pk_test_51SknIFK4C8jOyCJwoWDcL78m3LGYVrjcPnOr6yGQtDiG4B0xmibdX9wJ3Tj2QgcrWZl3ilLROdEDRumhaaIgZfh700HXUuPsxl
       - STRIPE_WEBHOOK_SECRET=whsec_338e054c19cddacf9595e8098557021197a6921e8fa1966dfa66f2e9c09a91e4
       - APP_URL=${APP_URL:-http://localhost:30080}
+    volumes:
+      # Docker socket required for strict isolation (spawning per-user containers)
+      # Note: Container needs docker group access (GID 995 on this system)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # Run with docker group GID to access Docker socket
+    # Format: GID:UID (docker group:nodeuser)
+    # Get docker GID with: getent group docker | cut -d: -f3
+    # On this system: docker GID is 995, nodeuser UID is 1001
+    # Run with docker group GID (995) as primary group for socket access
+    # Format: GID:UID (docker group:nodeuser)
+    user: '0:0'
     restart: unless-stopped
     depends_on:
       - jumphost

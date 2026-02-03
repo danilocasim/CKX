@@ -69,7 +69,7 @@ export default function Pricing() {
     }
     try {
       const response = await fetchWithAuth(
-        '/facilitator/api/v1/billing/checkout',
+        '/sailor-client/api/v1/billing/checkout',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

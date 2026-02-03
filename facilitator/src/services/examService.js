@@ -13,6 +13,7 @@ const MetricService = require('./metricService');
 const portAllocator = require('./portAllocator');
 const countdownService = require('./countdownService');
 const terminalSessionService = require('./terminalSessionService');
+const runtimeSessionService = require('./runtimeSessionService');
 
 // Configuration for multi-session limits
 const MAX_CONCURRENT_SESSIONS = parseInt(
@@ -153,6 +154,27 @@ async function createExam(examData) {
           error: termErr.message,
         });
         // Do not fail exam creation; terminal may be unavailable
+      }
+    }
+
+    // STRICT ISOLATION: Always create per-user runtime (VNC + SSH containers) for authenticated users
+    // No shared fallback - each user gets their own isolated containers
+    if (userId != null) {
+      try {
+        await runtimeSessionService.create(examId, userId, expiresAt);
+      } catch (runtimeErr) {
+        logger.error(
+          'ISOLATION BREACH PREVENTED: Runtime session creation failed — failing exam creation',
+          { examId, userId, error: runtimeErr.message }
+        );
+        // Hard-fail: no silent fallback to shared runtime (strict isolation requirement)
+        return {
+          success: false,
+          error: 'Runtime Unavailable',
+          message:
+            'Could not start your isolated exam environment. Please try again or contact support.',
+          details: runtimeErr.message,
+        };
       }
     }
 
@@ -678,6 +700,14 @@ async function endExam(examId, userId) {
       });
     }
 
+    try {
+      await runtimeSessionService.terminate(examId);
+    } catch (runtimeErr) {
+      logger.error(`Error terminating runtime session for ${examId}`, {
+        error: runtimeErr.message,
+      });
+    }
+
     logger.info(`Exam ${examId} completed`);
 
     return {
@@ -714,6 +744,7 @@ async function extendActiveSessionIfAny(userId, newExpiresAt) {
     if (!examInfo || !examInfo.accessPassId) return false;
     await redisClient.extendSessionExpiry(examId, newExpiresAt);
     await terminalSessionService.updateExpiresAt(examId, newExpiresAt);
+    await runtimeSessionService.updateExpiresAt(examId, newExpiresAt);
     return true;
   } catch (error) {
     logger.error('Error extending active session', {

@@ -45,11 +45,21 @@ const sshConfig = {
 const publicService = new PublicService(path.join(__dirname, 'public'));
 publicService.initialize();
 
-// Initialize VNC Service
+// Facilitator base URL for VNC routing (same as proxy target, without /facilitator path)
+const facilitatorBaseUrl =
+  process.env.FACILITATOR_URL ||
+  (fs.existsSync('/.dockerenv')
+    ? 'http://facilitator:3000'
+    : 'http://localhost:3001');
+
+// Initialize VNC Service (dynamic routing when examId + auth; uses facilitator routing API)
 const vncService = new VNCService({
   host: VNC_SERVICE_HOST,
   port: VNC_SERVICE_PORT,
   password: VNC_PASSWORD,
+  facilitatorUrl: facilitatorBaseUrl,
+  getTokenFromRequest: (req) =>
+    req && req.cookies && req.cookies.ckx_token ? req.cookies.ckx_token : null,
 });
 
 // SSH terminal namespace: runtime keyed by terminalSessionId only; require terminalSessionId + examId + token
@@ -67,12 +77,12 @@ sshIO.on('connection', async (socket) => {
     socket.disconnect(true);
     return;
   }
-  const valid = await terminalSessionManager.validateWithFacilitator(
+  const validation = await terminalSessionManager.validateWithFacilitator(
     terminalSessionId,
     examId,
     token
   );
-  if (!valid) {
+  if (!validation.valid) {
     socket.emit('error', {
       message:
         'Terminal access denied. You do not have access to this terminal session.',
@@ -80,7 +90,23 @@ sshIO.on('connection', async (socket) => {
     socket.disconnect(true);
     return;
   }
-  terminalSessionManager.addSocket(terminalSessionId, socket, sshConfig);
+  const resolvedSshConfig = {
+    ...sshConfig,
+    host: validation.sshHost || sshConfig.host,
+    port: validation.sshPort != null ? validation.sshPort : sshConfig.port,
+  };
+  console.log('Terminal attach (isolated runtime per connection)', {
+    terminalSessionId,
+    examId,
+    socketId: socket.id,
+    sshHost: resolvedSshConfig.host,
+    sshPort: resolvedSshConfig.port,
+  });
+  terminalSessionManager.addSocket(
+    terminalSessionId,
+    socket,
+    resolvedSshConfig
+  );
 });
 
 // Initialize Route Service (pass authService for set-cookie route)
@@ -92,9 +118,33 @@ app.use(cors());
 // Cookie parser for auth
 app.use(cookieParser());
 
-// Proxy /facilitator to facilitator service (so login and API calls return JSON, not SPA HTML).
-// pathRewrite: /facilitator/api/v1/... -> /api/v1/... so facilitator receives correct path.
-// In Docker use facilitator:3000. When running webapp locally (npm run dev), use localhost:3001 (facilitator port in docker-compose).
+// Proxy /sailor-client to Sailor-Client service (Control Plane - auth, payments, business logic)
+// In Docker use sailor-client:4000. When running webapp locally (npm run dev), use localhost:4001.
+const sailorClientUrl =
+  process.env.SAILOR_CLIENT_URL ||
+  (fs.existsSync('/.dockerenv')
+    ? 'http://sailor-client:4000'
+    : 'http://localhost:4001');
+app.use(
+  '/sailor-client',
+  createProxyMiddleware({
+    target: sailorClientUrl,
+    changeOrigin: true,
+    pathRewrite: { '^/sailor-client': '' },
+    onError(err, req, res) {
+      console.error('Sailor-Client proxy error', err.message);
+      res.status(503).json({
+        success: false,
+        error: 'Service Unavailable',
+        message: 'Control plane service unavailable. Is Sailor-Client running?',
+      });
+    },
+  })
+);
+
+// Proxy /facilitator to facilitator service (CKX Execution Engine - internal APIs only)
+// Browsers should NOT call these directly - use Sailor-Client instead
+// Kept for backward compatibility and internal service-to-service calls
 const facilitatorUrl =
   process.env.FACILITATOR_URL ||
   (fs.existsSync('/.dockerenv')
@@ -111,8 +161,7 @@ app.use(
       res.status(503).json({
         success: false,
         error: 'Service Unavailable',
-        message:
-          'Authentication service unavailable. Is the facilitator running?',
+        message: 'Execution engine unavailable. Is the facilitator running?',
       });
     },
   })

@@ -37,7 +37,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!isAuthenticated()) return;
-    apiFetch('/facilitator/api/v1/access/status')
+    apiFetch('/sailor-client/api/v1/access/status')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data?.data) return;
@@ -78,10 +78,13 @@ export default function Home() {
   }, [isAuthenticated, apiFetch]);
 
   useEffect(() => {
-    apiFetch('/facilitator/api/v1/exams/current')
+    apiFetch('/sailor-client/api/v1/exams/current')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data?.id) {
+        // Handle new response format: { success: true, data: null } when no exam exists
+        // or { success: true, data: { id, ... } } when exam exists
+        const examData = data?.success ? data.data : data;
+        if (examData?.id) {
           localStorage.setItem('currentExamData', JSON.stringify(data));
           if (data.status === 'EVALUATING' || data.status === 'EVALUATED') {
             setViewResultsExam(data);
@@ -134,7 +137,7 @@ export default function Home() {
     setPageError(null);
     setPageLoader(true);
     setLoaderMessage('Loading labs...');
-    apiFetch('/facilitator/api/v1/exams/labs')
+    apiFetch('/sailor-client/api/v1/exams/labs')
       .then((r) => {
         if (!r.ok) throw new Error('Failed to fetch labs');
         return r.json();
@@ -178,20 +181,43 @@ export default function Home() {
 
   function handleChooseExam() {
     setStartError(null);
-    apiFetch('/facilitator/api/v1/exams/current')
+    apiFetch('/sailor-client/api/v1/exams/current')
       .then((r) => {
         if (r.status === 404) {
+          // Old API format (404) - no exam exists
           if (labs.length) setModalOpen(true);
           else fetchLabs(true);
           return null;
         }
-        if (!r.ok) return null;
+        if (!r.ok) {
+          // Error response - proceed anyway
+          if (labs.length) setModalOpen(true);
+          else fetchLabs(true);
+          return null;
+        }
         return r.json();
       })
       .then((data) => {
-        if (data?.id) setActiveExamWarning(data);
+        if (!data) {
+          // Response was null (404 or error), already handled above
+          return;
+        }
+
+        // Handle new response format: { success: true, data: null } when no exam exists
+        // or { success: true, data: { id, ... } } when exam exists
+        const examData = data.success ? data.data : data;
+
+        if (examData && examData.id) {
+          // Active exam found, show warning
+          setActiveExamWarning(examData);
+        } else {
+          // No active exam (data is null or no id), proceed with exam selection
+          if (labs.length) setModalOpen(true);
+          else fetchLabs(true);
+        }
       })
       .catch(() => {
+        // On error, proceed anyway (allow user to try creating exam)
         if (labs.length) setModalOpen(true);
         else fetchLabs(true);
       });
@@ -245,7 +271,7 @@ export default function Home() {
       }`
     );
     const payload = { ...selectedLab, labId: selectedLab.id };
-    apiFetch('/facilitator/api/v1/exams/', {
+    apiFetch('/sailor-client/api/v1/exams/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -257,13 +283,16 @@ export default function Home() {
         return data;
       })
       .then((data) => {
-        if (!data.id) throw new Error('Invalid response: no exam id');
-        localStorage.setItem('currentExamId', data.id);
-        const warmUp = data.warmUpTimeInSeconds ?? 30;
+        // Handle new response format: { success: true, data: { id, ... } }
+        const examData = data.success ? data.data : data;
+        const examId = examData?.id || data.id;
+        if (!examId) throw new Error('Invalid response: no exam id');
+        localStorage.setItem('currentExamId', examId);
+        const warmUp = examData.warmUpTimeInSeconds ?? 30;
         setLoadingMessage(
           `Preparing your lab environment (${warmUp}s estimated)`
         );
-        return pollExamStatus(data.id);
+        return pollExamStatus(examId);
       })
       .then(() => {
         const examId = localStorage.getItem('currentExamId');

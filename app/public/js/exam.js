@@ -143,10 +143,11 @@ document.addEventListener('DOMContentLoaded', function () {
           }
         }
 
-        // Connect to Remote Desktop
+        // Connect to Remote Desktop (pass examId for per-user isolated desktop when available)
         RemoteDesktopService.connectToRemoteDesktop(
           vncFrame,
-          showVncConnectionStatus
+          showVncConnectionStatus,
+          examId
         );
 
         // Hide loader after a short delay
@@ -206,11 +207,13 @@ document.addEventListener('DOMContentLoaded', function () {
   // Connect to exam session for review
   function connectToExamSession() {
     console.log('Connecting to exam session in completed exam mode');
+    const examId = ExamApi.getExamId();
 
-    // Connect to Remote Desktop
+    // Connect to Remote Desktop (pass examId for per-user isolated desktop when available)
     RemoteDesktopService.connectToRemoteDesktop(
       vncFrame,
-      showVncConnectionStatus
+      showVncConnectionStatus,
+      examId
     );
 
     // Setup Remote Desktop frame handlers
@@ -231,8 +234,20 @@ document.addEventListener('DOMContentLoaded', function () {
     const examId = ExamApi.getExamId();
     if (!examId) return;
 
-    // First check exam status to handle completed exams
-    ExamApi.checkExamStatus(examId)
+    // User-scoped: ensure URL exam belongs to current user before loading anything
+    ExamApi.fetchCurrentExamInfo()
+      .then((current) => {
+        // fetchCurrentExamInfo now returns null or exam object directly
+        const myExamId = current && current.id ? current.id : null;
+        if (myExamId && myExamId !== examId) {
+          pageLoader.style.display = 'none';
+          alert('This exam belongs to another user. Redirecting to your exam.');
+          window.location.href = `/exam?id=${myExamId}`;
+          throw new Error('WRONG_EXAM');
+        }
+        // If current is null, that's fine - user might be accessing a different exam
+      })
+      .then(() => ExamApi.checkExamStatus(examId))
       .then((status) => {
         if (status === 'EVALUATED' || status === 'EVALUATING') {
           // Show option to view results for completed exams
@@ -241,7 +256,7 @@ document.addEventListener('DOMContentLoaded', function () {
           return null; // Skip loading questions
         }
 
-        // First fetch current exam info
+        // Fetch current exam info for timer etc.
         return ExamApi.fetchCurrentExamInfo()
           .then((data) => {
             examInfo = data;
@@ -302,8 +317,8 @@ document.addEventListener('DOMContentLoaded', function () {
           });
       })
       .catch((error) => {
+        if (error && error.message === 'WRONG_EXAM') return; // Already redirected
         console.error('Error loading exam:', error);
-        // Show an error message to the user
         alert(
           'Failed to load exam data. Please refresh the page or contact support.'
         );
@@ -474,10 +489,11 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
 
-    // Connect to Remote Desktop
+    // Connect to Remote Desktop (pass examId for per-user isolated desktop when available)
     RemoteDesktopService.connectToRemoteDesktop(
       vncFrame,
-      showVncConnectionStatus
+      showVncConnectionStatus,
+      ExamApi.getExamId()
     );
 
     // Calculate remaining time
@@ -669,9 +685,18 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       );
 
-      // Runtime isolation: fetch terminal session (user-scoped id) then attach with terminalSessionId + examId + token
+      // Runtime isolation: only connect if this exam belongs to the current user (user-scoped)
       (async function () {
         const examId = ExamApi.getExamId();
+        const current = await ExamApi.fetchCurrentExamInfo().catch(() => null);
+        const myExamId = current && current.id ? current.id : null;
+        if (myExamId && myExamId !== examId) {
+          UiUtils.showToast(
+            'This exam belongs to another user. You can only use the terminal for your own exam.',
+            { bgColor: 'bg-danger', textColor: 'text-white', delay: 6000 }
+          );
+          return;
+        }
         const session = await ExamApi.getTerminalSession(examId);
         if (!session || !session.id) {
           UiUtils.showToast('Terminal is not available for this session.', {
@@ -688,6 +713,7 @@ document.addEventListener('DOMContentLoaded', function () {
           TerminalService.initTerminal(sshTerminalContainer, true);
         } else {
           TerminalService.resizeTerminal(sshTerminalContainer);
+          TerminalService.reconnect();
         }
         setTimeout(() => {
           TerminalService.resizeTerminal(sshTerminalContainer);
@@ -786,7 +812,8 @@ document.addEventListener('DOMContentLoaded', function () {
         showVncConnectionStatus('Reconnecting to Remote Desktop...', 'info');
         RemoteDesktopService.connectToRemoteDesktop(
           vncFrame,
-          showVncConnectionStatus
+          showVncConnectionStatus,
+          ExamApi.getExamId()
         );
       });
     }

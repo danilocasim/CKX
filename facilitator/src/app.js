@@ -12,15 +12,19 @@ const authService = require('./services/authService');
 
 // Import routes
 const sshRoutes = require('./routes/sshRoutes');
-const examRoutes = require('./routes/examRoutes');
+const examRoutes = require('./routes/examRoutes'); // Deprecated - kept for backward compatibility only
 const assessmentRoutes = require('./routes/assessmentRoutes');
 const remoteDesktopRoutes = require('./routes/remoteDesktopRoutes');
 const sessionRoutes = require('./routes/sessionRoutes');
-const authRoutes = require('./routes/authRoutes');
-const userRoutes = require('./routes/userRoutes');
-const accessRoutes = require('./routes/accessRoutes');
-const billingRoutes = require('./routes/billingRoutes');
 const terminalRoutes = require('./routes/terminalRoutes');
+const internalRoutes = require('./routes/internalRoutes'); // CKX Execution Engine (internal APIs)
+
+// REMOVED: Auth, payment, user, access routes moved to Sailor-Client
+// These are no longer part of CKX Execution Engine
+// const authRoutes = require('./routes/authRoutes'); // REMOVED - Use Sailor-Client
+// const userRoutes = require('./routes/userRoutes'); // REMOVED - Use Sailor-Client
+// const accessRoutes = require('./routes/accessRoutes'); // REMOVED - Use Sailor-Client
+// const billingRoutes = require('./routes/billingRoutes'); // REMOVED - Use Sailor-Client
 
 // Import services for initialization
 const portAllocator = require('./services/portAllocator');
@@ -57,17 +61,32 @@ app.use(
   })
 );
 
-// API routes
+// Internal API routes (CKX Execution Engine - service-to-service only)
+// These are ONLY accessible by Sailor-Client, never browsers
+app.use('/internal', internalRoutes);
+
+// Public API routes
+// NOTE: Auth, payments, user management, and exam creation have been moved to Sailor-Client
+// CKX Execution Engine only handles runtime execution - no business logic
+
+// Runtime execution routes (still needed by webapp for terminal/VNC access)
 app.use('/api/v1', sshRoutes);
-app.use('/api/v1/exams', examRoutes);
 app.use('/api/v1/sessions', sessionRoutes);
 app.use('/api/v1/assements', assessmentRoutes);
 app.use('/api/v1/remote-desktop', remoteDesktopRoutes);
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/access', accessRoutes);
 app.use('/api/v1/terminal', terminalRoutes);
-app.use('/api/v1/billing', billingRoutes); // Note: webhook is registered separately above
+
+// Deprecated exam routes - kept for backward compatibility only
+// Browsers should use Sailor-Client instead: /sailor-client/api/v1/exams/*
+// These routes will be removed in final cleanup
+app.use('/api/v1/exams', examRoutes);
+
+// REMOVED: Auth, payment, user, access routes
+// These have been moved to Sailor-Client and are no longer part of CKX
+// app.use('/api/v1/auth', authRoutes); // REMOVED - Use Sailor-Client
+// app.use('/api/v1/users', userRoutes); // REMOVED - Use Sailor-Client
+// app.use('/api/v1/access', accessRoutes); // REMOVED - Use Sailor-Client
+// app.use('/api/v1/billing', billingRoutes); // REMOVED - Use Sailor-Client
 
 // Root route
 app.get('/', (req, res) => {

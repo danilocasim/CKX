@@ -43,7 +43,7 @@
     function loadAccessStatus() {
       const banner = document.getElementById('accessStatusBanner');
       if (!banner) return;
-      apiFetch('/facilitator/api/v1/access/status')
+      apiFetch('/sailor-client/api/v1/access/status')
         .then(function (r) {
           return r.ok ? r.json() : null;
         })
@@ -80,10 +80,10 @@
 
     // Function to check current exam status
     function checkCurrentExamStatus() {
-      apiFetch('/facilitator/api/v1/exams/current')
+      apiFetch('/sailor-client/api/v1/exams/current')
         .then((response) => {
           if (!response.ok) {
-            if (response.status !== 404) {
+            if (response.status !== 401 && response.status !== 404) {
               console.error(
                 'Error checking current exam status:',
                 response.status
@@ -94,30 +94,41 @@
           return response.json();
         })
         .then((data) => {
-          if (data && data.id) {
+          // Handle new response format: { success: true, data: null } when no exam exists
+          // or { success: true, data: { id, ... } } when exam exists
+          const examData = data?.success ? data.data : data;
+          if (examData && examData.id) {
             // Store current exam data in localStorage for the View Results functionality
-            localStorage.setItem('currentExamData', JSON.stringify(data));
+            localStorage.setItem('currentExamData', JSON.stringify(examData));
 
             // Show View Results button only if status is EVALUATING or EVALUATED
-            if (data.status === 'EVALUATING' || data.status === 'EVALUATED') {
+            if (
+              examData.status === 'EVALUATING' ||
+              examData.status === 'EVALUATED'
+            ) {
               if (viewPastResultsBtn) {
                 viewPastResultsBtn.closest('li').style.display = 'block';
               }
             }
 
-            // If exam is in PREPARING state, show loading overlay and start polling
-            if (data.status === 'PREPARING') {
+            // If exam is in PREPARING or active state, show loading overlay and start polling
+            if (
+              examData.status === 'PREPARING' ||
+              examData.status === 'active'
+            ) {
               console.log(
-                'Exam is in PREPARING state, showing loading overlay'
+                'Exam is in PREPARING/active state, showing loading overlay'
               );
               showLoadingOverlay();
               updateLoadingMessage('Preparing lab environment...');
-              updateExamInfo(data.info?.name || 'Unknown Exam');
+              updateExamInfo(
+                examData.info?.name || examData.lab_id || 'Unknown Exam'
+              );
               // Start polling for status
-              pollExamStatus(data.id).then((statusData) => {
+              pollExamStatus(examData.id).then((statusData) => {
                 if (statusData.status === 'READY') {
                   // Redirect to exam page when ready
-                  window.location.href = `/exam.html?id=${data.id}`;
+                  window.location.href = `/exam.html?id=${examData.id}`;
                 }
               });
             }
@@ -134,10 +145,10 @@
 
       console.log('Checking for active exam sessions...');
       // First check if there's any active exam
-      apiFetch('/facilitator/api/v1/exams/current')
+      apiFetch('/sailor-client/api/v1/exams/current')
         .then((response) => {
           if (response.status === 404) {
-            console.log('No active exam found, proceeding with new exam');
+            console.log('No active exam found (404), proceeding with new exam');
             // No active exam, proceed as normal
             if (labs.length > 0) {
               console.log('Using pre-loaded labs data');
@@ -154,16 +165,46 @@
               'Error checking current exam status:',
               response.status
             );
+            // On error, proceed anyway (allow user to try creating exam)
+            if (labs.length > 0) {
+              examSelectionModal.show();
+            } else {
+              fetchLabs(true);
+            }
             return null;
           }
 
           return response.json();
         })
         .then((data) => {
-          if (data && data.id) {
-            console.log('Active exam found:', data.id, 'Status:', data.status);
+          if (!data) {
+            // Response was null (404 or error), already handled above
+            return;
+          }
+
+          // Handle new response format: { success: true, data: null } when no exam exists
+          // or { success: true, data: { id, ... } } when exam exists
+          const examData = data.success ? data.data : data;
+
+          if (examData && examData.id) {
+            console.log(
+              'Active exam found:',
+              examData.id,
+              'Status:',
+              examData.status
+            );
             // Active exam found, show warning modal
-            showActiveExamWarningModal(data);
+            showActiveExamWarningModal(examData);
+          } else {
+            // No active exam (data is null or no id), proceed with new exam
+            console.log('No active exam found, proceeding with new exam');
+            if (labs.length > 0) {
+              console.log('Using pre-loaded labs data');
+              examSelectionModal.show();
+            } else {
+              console.log('No pre-loaded labs data available, fetching now...');
+              fetchLabs(true);
+            }
           }
         })
         .catch((error) => {
@@ -253,7 +294,7 @@
 
           console.log('Attempting to terminate exam:', examData.id);
           // Call API to terminate the active exam
-          apiFetch(`/facilitator/api/v1/exams/${examData.id}/terminate`, {
+          apiFetch(`/sailor-client/api/v1/exams/${examData.id}/terminate`, {
             method: 'POST',
           })
             .then((response) => {
@@ -489,7 +530,7 @@
         const createPayload = { ...selectedLab, labId: selectedLab.id };
 
         // Make a POST request to the facilitator API - using exams endpoint for POST
-        apiFetch('/facilitator/api/v1/exams/', {
+        apiFetch('/sailor-client/api/v1/exams/', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -508,7 +549,9 @@
             return data;
           })
           .then((data) => {
-            const examId = data.id;
+            // Handle new response format: { success: true, data: { id, ... } }
+            const examData = data.success ? data.data : data;
+            const examId = examData?.id || data.id;
             if (!examId) {
               throw new Error('Invalid response: no exam id');
             }
@@ -516,13 +559,13 @@
             localStorage.setItem('currentExamId', examId);
 
             // Start polling for status
-            const warmUpTime = data.warmUpTimeInSeconds || 30;
+            const warmUpTime = examData.warmUpTimeInSeconds || 30;
             updateLoadingMessage(
               `Preparing your lab environment (${warmUpTime}s estimated)`
             );
 
             // Poll for exam status until it's ready
-            return pollExamStatus(data.id);
+            return pollExamStatus(examId);
           })
           .then(() => {
             // Redirect to the lab page after status is READY
@@ -569,7 +612,7 @@
         const poll = async () => {
           try {
             const response = await apiFetch(
-              `/facilitator/api/v1/exams/${examId}/status`
+              `/sailor-client/api/v1/exams/${examId}/status`
             );
             const data = await response.json();
 
@@ -617,7 +660,7 @@
         showLoadingOverlay();
         updateLoadingMessage('Starting exam environment...');
 
-        const response = await apiFetch('/facilitator/api/v1/exams', {
+        const response = await apiFetch('/sailor-client/api/v1/exams', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
