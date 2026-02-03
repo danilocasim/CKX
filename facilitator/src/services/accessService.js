@@ -7,6 +7,19 @@ const db = require('../utils/db');
 const logger = require('../utils/logger');
 
 /**
+ * Format hours remaining as human-readable string (e.g. "38h", "2d 5h")
+ * @param {number} hours
+ * @returns {string}
+ */
+function formatRemainingHours(hours) {
+  if (hours <= 0) return '0h';
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remainder = hours % 24;
+  return remainder > 0 ? `${days}d ${remainder}h` : `${days}d`;
+}
+
+/**
  * Get all available pass types
  * @returns {Promise<Array>} List of active pass types
  */
@@ -37,38 +50,47 @@ async function getPassType(passTypeId) {
  */
 async function checkUserAccess(userId) {
   // Find active pass that hasn't expired
-  const activePass = await db.query(`
+  const activePass = await db.query(
+    `
     SELECT * FROM access_passes
     WHERE user_id = $1
       AND status = 'activated'
       AND expires_at > NOW()
     ORDER BY expires_at DESC
     LIMIT 1
-  `, [userId]);
+  `,
+    [userId]
+  );
 
   if (activePass.rows.length > 0) {
     const pass = activePass.rows[0];
-    const hoursRemaining = Math.ceil(
-      (new Date(pass.expires_at) - new Date()) / (1000 * 60 * 60)
-    );
+    const now = new Date();
+    const expiresAt = new Date(pass.expires_at);
+    const hoursRemaining = Math.ceil((expiresAt - now) / (1000 * 60 * 60));
+    const remainingHuman = formatRemainingHours(hoursRemaining);
 
     return {
       hasValidPass: true,
+      hasAccess: true,
       passId: pass.id,
       passType: pass.pass_type,
       activatedAt: pass.activated_at,
       expiresAt: pass.expires_at,
       hoursRemaining,
+      remainingHuman,
     };
   }
 
   // Check for purchased but not activated passes
-  const pendingPass = await db.query(`
+  const pendingPass = await db.query(
+    `
     SELECT * FROM access_passes
     WHERE user_id = $1 AND status = 'purchased'
     ORDER BY created_at ASC
     LIMIT 1
-  `, [userId]);
+  `,
+    [userId]
+  );
 
   return {
     hasValidPass: false,
@@ -84,7 +106,8 @@ async function checkUserAccess(userId) {
  * @returns {Promise<Array>} List of user's passes
  */
 async function getUserPasses(userId) {
-  const result = await db.query(`
+  const result = await db.query(
+    `
     SELECT
       ap.*,
       pt.name as pass_name,
@@ -93,9 +116,11 @@ async function getUserPasses(userId) {
     JOIN pass_types pt ON ap.pass_type = pt.id
     WHERE ap.user_id = $1
     ORDER BY ap.created_at DESC
-  `, [userId]);
+  `,
+    [userId]
+  );
 
-  return result.rows.map(pass => ({
+  return result.rows.map((pass) => ({
     id: pass.id,
     passType: pass.pass_type,
     passName: pass.pass_name,
@@ -106,9 +131,15 @@ async function getUserPasses(userId) {
     activatedAt: pass.activated_at,
     expiresAt: pass.expires_at,
     features: pass.features,
-    hoursRemaining: pass.status === 'activated' && pass.expires_at
-      ? Math.max(0, Math.ceil((new Date(pass.expires_at) - new Date()) / (1000 * 60 * 60)))
-      : null,
+    hoursRemaining:
+      pass.status === 'activated' && pass.expires_at
+        ? Math.max(
+            0,
+            Math.ceil(
+              (new Date(pass.expires_at) - new Date()) / (1000 * 60 * 60)
+            )
+          )
+        : null,
   }));
 }
 
@@ -120,10 +151,13 @@ async function getUserPasses(userId) {
  */
 async function activatePass(passId, userId) {
   // Get the pass and verify ownership
-  const passResult = await db.query(`
+  const passResult = await db.query(
+    `
     SELECT * FROM access_passes
     WHERE id = $1 AND user_id = $2 AND status = 'purchased'
-  `, [passId, userId]);
+  `,
+    [passId, userId]
+  );
 
   if (passResult.rows.length === 0) {
     throw new Error('Pass not found or already activated');
@@ -131,13 +165,18 @@ async function activatePass(passId, userId) {
 
   const pass = passResult.rows[0];
   const activatedAt = new Date();
-  const expiresAt = new Date(activatedAt.getTime() + (pass.duration_hours * 60 * 60 * 1000));
+  const expiresAt = new Date(
+    activatedAt.getTime() + pass.duration_hours * 60 * 60 * 1000
+  );
 
-  await db.query(`
+  await db.query(
+    `
     UPDATE access_passes
     SET status = 'activated', activated_at = $1, expires_at = $2
     WHERE id = $3
-  `, [activatedAt, expiresAt, passId]);
+  `,
+    [activatedAt, expiresAt, passId]
+  );
 
   logger.info('Access pass activated', { passId, userId, expiresAt });
 
@@ -175,18 +214,39 @@ async function ensureActivePass(userId) {
  * @returns {Promise<Object>} Created pass
  */
 async function createAccessPass(passData) {
-  const { userId, passTypeId, priceCents, durationHours, stripePaymentId, stripeCheckoutSessionId } = passData;
+  const {
+    userId,
+    passTypeId,
+    priceCents,
+    durationHours,
+    stripePaymentId,
+    stripeCheckoutSessionId,
+  } = passData;
 
-  const result = await db.query(`
+  const result = await db.query(
+    `
     INSERT INTO access_passes (
       user_id, pass_type, duration_hours, price_cents,
       stripe_payment_id, stripe_checkout_session_id, status
     )
     VALUES ($1, $2, $3, $4, $5, $6, 'purchased')
     RETURNING *
-  `, [userId, passTypeId, durationHours, priceCents, stripePaymentId, stripeCheckoutSessionId]);
+  `,
+    [
+      userId,
+      passTypeId,
+      durationHours,
+      priceCents,
+      stripePaymentId,
+      stripeCheckoutSessionId,
+    ]
+  );
 
-  logger.info('Access pass created', { passId: result.rows[0].id, userId, passTypeId });
+  logger.info('Access pass created', {
+    passId: result.rows[0].id,
+    userId,
+    passTypeId,
+  });
 
   return result.rows[0];
 }
@@ -241,10 +301,13 @@ async function expireOldPasses() {
  * @returns {Promise<Object>} Validation result
  */
 async function validatePassById(passId) {
-  const result = await db.query(`
+  const result = await db.query(
+    `
     SELECT * FROM access_passes
     WHERE id = $1
-  `, [passId]);
+  `,
+    [passId]
+  );
 
   if (result.rows.length === 0) {
     return {

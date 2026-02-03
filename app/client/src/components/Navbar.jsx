@@ -26,7 +26,7 @@ export default function Navbar() {
   return (
     <nav className='fixed top-0 left-0 right-0 z-50 bg-bg-dark/95 backdrop-blur border-b border-zinc-800'>
       <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>
-        <div className='flex items-center justify-between h-16'>
+        <div className='flex flex-wrap items-center justify-between h-16 relative'>
           <Link to='/dashboard' className='brand-gradient'>
             DojoExam
           </Link>
@@ -39,16 +39,16 @@ export default function Navbar() {
             <i className={`fas fa-${open ? 'times' : 'bars'}`} />
           </button>
           <div
-            className={`${
+            className={`w-full md:w-auto absolute top-full left-0 md:static ${
               open ? 'block' : 'hidden'
-            } md:flex md:items-center md:gap-6`}
+            } md:flex md:items-center md:gap-6 bg-bg-card md:bg-transparent border-b border-zinc-800 md:border-0 shadow-lg md:shadow-none mt-0`}
           >
-            <div className='flex flex-col md:flex-row md:items-center gap-2 md:gap-6 py-4 md:py-0'>
+            <div className='flex flex-col md:flex-row md:items-center gap-1 md:gap-6 py-4 px-4 md:py-0 md:px-0'>
               {navLink('/', 'Exams')}
               {navLink('/pricing', 'Pricing')}
               {navLink('/dashboard', 'Dashboard')}
             </div>
-            <div className='pb-4 md:pb-0 md:ml-auto'>
+            <div className='pb-4 px-4 md:px-0 md:pb-0 md:ml-auto border-t border-zinc-800 md:border-t-0 pt-3 md:pt-0'>
               {isAuthenticated() && user ? (
                 <>
                   <Link

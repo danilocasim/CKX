@@ -159,6 +159,14 @@ POST   /api/v1/billing/webhook
 
 **Result**: One app (CKX) for exam session, auth, and payment. No separate frontend.
 
+**Recent implementation (2026-02-03)** — UX and enforcement:
+
+- **Multi-session enforcement (backend)**: One active exam per user. `createExam` rejects with 409 if the user already has an active exam. `getCurrentExam(userId)` returns only that user’s active exam. Session ownership: every exam/session request validates `session.userId === req.userId` via `requireExamOwnership` and `requireSessionAccess`; 403 on mismatch.
+- **Payment & access UX**: Pricing page shows total access time per pass (e.g. “38 hours full access”) matching backend pass duration. Access status API returns `remainingHuman` for dashboard/Home. After payment, remaining time is shown on Dashboard (read-only, backend is source of truth).
+- **Access denial UX**: No `alert()`. Access/start errors shown with inline callout (dismissible) and link to Pricing. Exam loading overlay is not shown when access is denied (overlay closed before showing error).
+- **UI consistency & nav**: Exam home (Home) uses same design system as Pricing (spacing, typography). Nav labels: Exams, Pricing, Dashboard, Account, Sign In / Sign Out. Mobile: burger menu opens a full-width panel with background and visible links; no overflow.
+- **Mock vs paid (UI)**: Mock exams labeled “Free Mock Exam” with note “2-hour session limit” and upgrade path to Pricing. Full-access users see “Full Access Enabled” plus remaining time in the banner. Paid full exams labeled “Full Exam (access pass required)” in the selector.
+
 ---
 
 ### Phase 6: Production Deployment ⏳
@@ -271,14 +279,16 @@ POST   /api/v1/billing/webhook
 
 ## Decision Log
 
-| Date       | Decision                                 | Rationale                                                     |
-| ---------- | ---------------------------------------- | ------------------------------------------------------------- |
-| 2026-02-02 | One exam per user                        | Mirrors real exams, saves resources                           |
-| 2026-02-02 | PostgreSQL over MongoDB                  | Relational data, ACID compliance                              |
-| 2026-02-02 | Stripe for payments                      | Developer-friendly, handles complexity                        |
-| 2026-02-02 | AWS over GCP/Azure                       | Docker-in-Docker support on EC2                               |
-| 2026-02-02 | Shared containers (Phases 1–5)           | Simpler architecture for &lt;100 users                        |
-| 2026-02-03 | Single CKX frontend for auth and payment | One app for exam session, login, register, dashboard, pricing |
+| Date       | Decision                                     | Rationale                                                                |
+| ---------- | -------------------------------------------- | ------------------------------------------------------------------------ |
+| 2026-02-02 | One exam per user                            | Mirrors real exams, saves resources                                      |
+| 2026-02-02 | PostgreSQL over MongoDB                      | Relational data, ACID compliance                                         |
+| 2026-02-02 | Stripe for payments                          | Developer-friendly, handles complexity                                   |
+| 2026-02-02 | AWS over GCP/Azure                           | Docker-in-Docker support on EC2                                          |
+| 2026-02-02 | Shared containers (Phases 1–5)               | Simpler architecture for &lt;100 users                                   |
+| 2026-02-03 | Single CKX frontend for auth and payment     | One app for exam session, login, register, dashboard, pricing            |
+| 2026-02-03 | One active exam per user + session ownership | Backend enforcement; 409 on duplicate start; 403 on cross-user access    |
+| 2026-02-03 | Access/time UX and no-alert policy           | Checkout shows access time; callouts for errors; remaining time from API |
 
 ---
 

@@ -1,8 +1,16 @@
 const express = require('express');
 const examController = require('../controllers/examController');
-const { validateCreateExam, validateEvaluateExam, validateExamEvents } = require('../middleware/validators');
+const {
+  validateCreateExam,
+  validateEvaluateExam,
+  validateExamEvents,
+} = require('../middleware/validators');
 const { optionalAuth } = require('../middleware/authMiddleware');
-const { requireFullAccess, requireSessionAccess } = require('../middleware/accessMiddleware');
+const {
+  requireFullAccess,
+  requireSessionAccess,
+  requireExamOwnership,
+} = require('../middleware/accessMiddleware');
 
 const router = express.Router();
 
@@ -15,73 +23,121 @@ router.get('/labs', optionalAuth, examController.getLabsList);
 
 /**
  * @route POST /api/v1/exams
- * @desc Create a new exam
+ * @desc Create a new exam (one active exam per user)
  * @access Public (mock exams) / Access pass required (full exams)
  */
-router.post('/', optionalAuth, validateCreateExam, requireFullAccess, examController.createExam);
+router.post(
+  '/',
+  optionalAuth,
+  validateCreateExam,
+  requireFullAccess,
+  examController.createExam
+);
 
 /**
  * @route GET /api/v1/exams/current
- * @desc Get the current active exam
+ * @desc Get the current active exam for the user (one per user when authenticated)
  * @access Public
  */
-router.get('/current', examController.getCurrentExam);
+router.get('/current', optionalAuth, examController.getCurrentExam);
 
 /**
  * @route GET /api/v1/exams/:examId/assets
  * @desc Get exam assets
- * @access Public
+ * @access Owner only (or mock/legacy)
  */
-router.get('/:examId/assets', examController.getExamAssets);
+router.get(
+  '/:examId/assets',
+  optionalAuth,
+  requireExamOwnership,
+  examController.getExamAssets
+);
 
 /**
  * @route GET /api/v1/exams/:examId/questions
  * @desc Get exam questions
- * @access Public (mock exams) / Access pass required (full exams)
+ * @access Owner + session access (mock/full)
  */
-router.get('/:examId/questions', requireSessionAccess, examController.getExamQuestions);
+router.get(
+  '/:examId/questions',
+  optionalAuth,
+  requireSessionAccess,
+  examController.getExamQuestions
+);
 
 /**
  * @route POST /api/v1/exams/:examId/evaluate
  * @desc Evaluate an exam
- * @access Public (mock exams) / Access pass required (full exams)
+ * @access Owner + session access
  */
-router.post('/:examId/evaluate', requireSessionAccess, validateEvaluateExam, examController.evaluateExam);
+router.post(
+  '/:examId/evaluate',
+  optionalAuth,
+  requireSessionAccess,
+  validateEvaluateExam,
+  examController.evaluateExam
+);
 
 /**
  * @route POST /api/v1/exams/:examId/terminate
  * @desc End an exam
- * @access Public
+ * @access Owner only (or mock/legacy)
  */
-router.post('/:examId/terminate', examController.endExam);
+router.post(
+  '/:examId/terminate',
+  optionalAuth,
+  requireExamOwnership,
+  examController.endExam
+);
 
 /**
  * @route GET /api/v1/exams/:examId/answers
  * @desc Get exam answers
- * @access Public
+ * @access Owner only (or mock/legacy)
  */
-router.get('/:examId/answers', examController.getExamAnswers);
+router.get(
+  '/:examId/answers',
+  optionalAuth,
+  requireExamOwnership,
+  examController.getExamAnswers
+);
 
 /**
  * @route GET /api/v1/exams/:examId/status
  * @desc Get exam status
- * @access Public
+ * @access Owner only (or mock/legacy)
  */
-router.get('/:examId/status', examController.getExamStatus);
+router.get(
+  '/:examId/status',
+  optionalAuth,
+  requireExamOwnership,
+  examController.getExamStatus
+);
 
 /**
  * @route GET /api/v1/exams/:examId/result
  * @desc Get exam result
- * @access Public
+ * @access Owner only (or mock/legacy)
  */
-router.get('/:examId/result', examController.getExamResult);
+router.get(
+  '/:examId/result',
+  optionalAuth,
+  requireExamOwnership,
+  examController.getExamResult
+);
 
 /**
  * @route POST /api/v1/exams/:examId/events
  * @desc Update exam events
- * @access Public (mock exams) / Access pass required (full exams)
+ * @access Owner + session access
  */
-router.post('/:examId/events', requireSessionAccess, validateExamEvents, examController.updateExamEvents);
+router.post(
+  '/:examId/events',
+  optionalAuth,
+  requireSessionAccess,
+  validateExamEvents,
+  examController.updateExamEvents
+);
 
 /**
  * @route POST /api/v1/exams/metrics/:examId
@@ -90,4 +146,4 @@ router.post('/:examId/events', requireSessionAccess, validateExamEvents, examCon
  */
 router.post('/metrics/:examId', examController.submitMetrics);
 
-module.exports = router; 
+module.exports = router;

@@ -23,6 +23,9 @@ export default function Home() {
   const [viewResultsExam, setViewResultsExam] = useState(null);
   const [activeExamWarning, setActiveExamWarning] = useState(null);
   const [terminating, setTerminating] = useState(false);
+  const [pageError, setPageError] = useState(null);
+  const [startError, setStartError] = useState(null);
+  const [terminateError, setTerminateError] = useState(null);
 
   const apiFetch = useCallback(
     (url, opts) =>
@@ -48,7 +51,7 @@ export default function Home() {
             show: true,
             status: 'full',
             text:
-              'Full access enabled' +
+              'Full Access Enabled' +
               (remain ? ' · ' + remain + ' remaining' : ''),
           });
         } else if (d.hasPendingPass) {
@@ -128,6 +131,7 @@ export default function Home() {
   }
 
   function fetchLabs(showModalAfter = false) {
+    setPageError(null);
     setPageLoader(true);
     setLoaderMessage('Loading labs...');
     apiFetch('/facilitator/api/v1/exams/labs')
@@ -153,7 +157,7 @@ export default function Home() {
       })
       .catch(() => {
         setPageLoader(false);
-        alert('Failed to load labs. Please try again later.');
+        setPageError('Failed to load labs. Please try again later.');
       });
   }
 
@@ -173,6 +177,7 @@ export default function Home() {
   }, [category, filteredLabs]);
 
   function handleChooseExam() {
+    setStartError(null);
     apiFetch('/facilitator/api/v1/exams/current')
       .then((r) => {
         if (r.status === 404) {
@@ -200,6 +205,7 @@ export default function Home() {
 
   function handleTerminateAndProceed() {
     if (!activeExamWarning?.id) return;
+    setTerminateError(null);
     setTerminating(true);
     setLoadingOverlay(true);
     setLoadingMessage('Terminating active session...');
@@ -221,12 +227,15 @@ export default function Home() {
       .catch(() => {
         setLoadingOverlay(false);
         setTerminating(false);
-        alert('Failed to terminate the active exam. Please try again later.');
+        setTerminateError(
+          'Failed to terminate the active exam. Please try again later.'
+        );
       });
   }
 
   function handleStartSelectedExam() {
     if (!selectedLab) return;
+    setStartError(null);
     setModalOpen(false);
     setLoadingOverlay(true);
     setLoadingMessage('Starting lab environment...');
@@ -262,9 +271,9 @@ export default function Home() {
       })
       .catch((err) => {
         setLoadingOverlay(false);
-        alert(
-          err.message || 'Failed to start the lab. Please try again later.'
-        );
+        const msg =
+          err.message || 'Failed to start the lab. Please try again later.';
+        setStartError(msg);
       });
   }
 
@@ -278,13 +287,48 @@ export default function Home() {
         </div>
       )}
 
+      {/* Inline error callouts (no browser alerts) */}
+      {(pageError || startError || terminateError) && (
+        <div className='max-w-4xl mx-auto px-4 pt-24'>
+          <div
+            role='alert'
+            className='rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-amber-200 text-sm flex flex-wrap items-center justify-between gap-3'
+          >
+            <span>
+              {pageError || startError || terminateError}
+              {(startError || terminateError) && (
+                <span className='block mt-2 text-amber-300/90'>
+                  If this is an access restriction, get full access from{' '}
+                  <a href='/pricing' className='underline hover:text-amber-200'>
+                    Pricing
+                  </a>
+                  .
+                </span>
+              )}
+            </span>
+            <button
+              type='button'
+              onClick={() => {
+                setPageError(null);
+                setStartError(null);
+                setTerminateError(null);
+              }}
+              className='shrink-0 px-2 py-1 rounded text-amber-400 hover:text-amber-200'
+              aria-label='Dismiss'
+            >
+              <i className='fas fa-times' />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Hero */}
       <section className='pt-28 pb-16 px-4 bg-gradient-to-b from-bg-card to-bg-dark'>
         <div className='max-w-4xl mx-auto text-center'>
           <h1 className='text-3xl md:text-4xl font-bold mb-3'>
             Kubernetes Certification Practice
           </h1>
-          <p className='text-zinc-400 mb-4'>
+          <p className='text-zinc-400 mb-6'>
             Practice in a realistic environment. Choose a mock exam to start
             free, or unlock full exams with an access pass.
           </p>
@@ -436,14 +480,26 @@ export default function Home() {
               </div>
               {selectedLab && (
                 <div className='p-3 rounded-lg bg-bg-surface border border-zinc-700 text-sm'>
-                  <div className='mb-2'>
+                  <div className='mb-2 space-y-1'>
                     {selectedLab.type === 'mock' || selectedLab.isFree ? (
-                      <span className='inline-block px-2 py-0.5 rounded text-xs bg-accent-green/20 text-accent-green'>
-                        Free Mock Exam
-                      </span>
+                      <>
+                        <span className='inline-block px-2 py-0.5 rounded text-xs bg-accent-green/20 text-accent-green font-medium'>
+                          Free Mock Exam
+                        </span>
+                        <p className='text-zinc-500 text-xs'>
+                          2-hour session limit. Get full access from{' '}
+                          <a
+                            href='/pricing'
+                            className='text-primary hover:underline'
+                          >
+                            Pricing
+                          </a>
+                          .
+                        </p>
+                      </>
                     ) : (
                       <span className='inline-block px-2 py-0.5 rounded text-xs bg-accent-blue/20 text-accent-blue'>
-                        Full Exam (Paid)
+                        Full Exam (access pass required)
                       </span>
                     )}
                   </div>

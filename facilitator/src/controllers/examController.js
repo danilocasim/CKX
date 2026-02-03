@@ -19,7 +19,7 @@ async function getLabsList(req, res) {
     const isAuthenticated = !!req.userId;
 
     // Transform labs for client
-    let labs = labsData.labs.map(lab => ({
+    let labs = labsData.labs.map((lab) => ({
       id: lab.id,
       name: lab.name,
       category: lab.category,
@@ -32,19 +32,19 @@ async function getLabsList(req, res) {
 
     // Filter by type if specified
     if (type) {
-      labs = labs.filter(lab => lab.type === type);
+      labs = labs.filter((lab) => lab.type === type);
     }
 
     // Filter by category if specified
     if (category) {
-      labs = labs.filter(lab =>
-        lab.category.toLowerCase() === category.toLowerCase()
+      labs = labs.filter(
+        (lab) => lab.category.toLowerCase() === category.toLowerCase()
       );
     }
 
     // Unauthenticated users only see mock exams
     if (!isAuthenticated) {
-      labs = labs.filter(lab => lab.type === 'mock');
+      labs = labs.filter((lab) => lab.type === 'mock');
     }
 
     return res.json({ success: true, labs });
@@ -53,7 +53,7 @@ async function getLabsList(req, res) {
     return res.status(500).json({
       success: false,
       error: 'Failed to load labs',
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -73,12 +73,12 @@ async function createExam(req, res) {
     try {
       const labsPath = path.join(__dirname, '../../assets/exams/labs.json');
       const labsData = JSON.parse(fs.readFileSync(labsPath, 'utf8'));
-      const lab = labsData.labs.find(l => l.id === examData.labId);
+      const lab = labsData.labs.find((l) => l.id === examData.labId);
 
       if (!lab) {
         return res.status(404).json({
           error: 'Lab not found',
-          message: `Lab with id "${examData.labId}" not found`
+          message: `Lab with id "${examData.labId}" not found`,
         });
       }
 
@@ -100,30 +100,31 @@ async function createExam(req, res) {
       logger.error('Failed to load lab data', { error: error.message });
       return res.status(500).json({
         error: 'Failed to load lab',
-        message: error.message
+        message: error.message,
       });
     }
   }
 
+  examData.userId = req.userId != null ? req.userId : null;
+
   const result = await examService.createExam(examData);
-  
+
   if (!result.success) {
-    // Handle the specific case of an exam already existing
     if (result.error === 'Exam already exists') {
-      return res.status(409).json({ 
+      return res.status(409).json({
         error: result.error,
         message: result.message,
-        currentExamId: result.currentExamId
+        currentExamId: result.currentExamId,
       });
     }
-    
+
     // Handle other errors
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: result.error,
-      message: result.message
+      message: result.message,
     });
   }
-  
+
   return res.status(201).json(result.data);
 }
 
@@ -133,20 +134,23 @@ async function createExam(req, res) {
  * @param {Object} res - Express response object
  */
 async function getCurrentExam(req, res) {
-  logger.info('Received request to get current exam');
-  
-  const result = await examService.getCurrentExam();
-  
+  const userId = req.userId != null ? req.userId : null;
+  logger.info('Received request to get current exam', {
+    userId: userId ? 'present' : 'anonymous',
+  });
+
+  const result = await examService.getCurrentExam(userId);
+
   if (!result.success) {
     if (result.error === 'Not Found') {
       return res.status(404).json({ message: result.message });
     }
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: result.error,
-      message: result.message
+      message: result.message,
     });
   }
-  
+
   return res.status(200).json(result.data);
 }
 
@@ -157,53 +161,58 @@ async function getCurrentExam(req, res) {
  */
 async function getExamAssets(req, res) {
   const examId = req.params.examId;
-  
+
   logger.info('Received request to get exam assets', { examId });
-  
+
   try {
     // Check if exam exists
     const examInfo = await redisClient.getExamInfo(examId);
-    
+
     if (!examInfo) {
       logger.error(`Exam not found with ID: ${examId}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Not Found',
-        message: 'Exam not found' 
+        message: 'Exam not found',
       });
     }
-    
+
     // Get asset path from exam info
     const assetPath = examInfo.assetPath;
     if (!assetPath) {
       logger.error(`Asset path not found for exam: ${examId}`);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Configuration Error',
-        message: 'Exam asset path not defined'
+        message: 'Exam asset path not defined',
       });
     }
-    
+
     // Construct the path to the assets.zip file (actually a tar archive)
     const assetsZipPath = path.join(process.cwd(), assetPath, 'assets.tar.gz');
-    
+
     if (!fs.existsSync(assetsZipPath)) {
       logger.error(`Assets file not found at path: ${assetsZipPath}`);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'File Not Found',
-        message: 'Exam assets file not found'
+        message: 'Exam assets file not found',
       });
     }
-    
-    logger.info(`Sending assets file for exam ${examId} from path ${assetsZipPath}`);
-    
+
+    logger.info(
+      `Sending assets file for exam ${examId} from path ${assetsZipPath}`
+    );
+
     // Set the content type for tar.gz file and send it
     res.setHeader('Content-Type', 'application/gzip');
-    res.setHeader('Content-Disposition', `attachment; filename="assets-${examId}.tar.gz"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="assets-${examId}.tar.gz"`
+    );
     return res.sendFile(assetsZipPath);
   } catch (error) {
     logger.error('Error retrieving exam assets', { error: error.message });
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Failed to retrieve exam assets',
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -215,21 +224,21 @@ async function getExamAssets(req, res) {
  */
 async function getExamQuestions(req, res) {
   const examId = req.params.examId;
-  
+
   logger.info('Received request to get exam questions', { examId });
-  
+
   const result = await examService.getExamQuestions(examId);
-  
+
   if (!result.success) {
     if (result.error === 'Not Found') {
       return res.status(404).json({ error: 'Exam not found' });
     }
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: result.error,
-      message: result.message
+      message: result.message,
     });
   }
-  
+
   return res.status(200).json(result.data);
 }
 
@@ -240,18 +249,18 @@ async function getExamQuestions(req, res) {
  */
 async function evaluateExam(req, res) {
   const examId = req.params.examId;
-  
+
   logger.info('Received request to evaluate exam', { examId, data: req.body });
-  
+
   const result = await examService.evaluateExam(examId, req.body);
-  
+
   if (!result.success) {
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: result.error,
-      message: result.message
+      message: result.message,
     });
   }
-  
+
   return res.status(200).json(result.data);
 }
 
@@ -262,18 +271,18 @@ async function evaluateExam(req, res) {
  */
 async function endExam(req, res) {
   const examId = req.params.examId;
-  
+
   logger.info('Received request to end exam', { examId });
-  
+
   const result = await examService.endExam(examId);
-  
+
   if (!result.success) {
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: result.error,
-      message: result.message
+      message: result.message,
     });
   }
-  
+
   return res.status(200).json(result.data);
 }
 
@@ -284,50 +293,52 @@ async function endExam(req, res) {
  */
 async function getExamAnswers(req, res) {
   const examId = req.params.examId;
-  
+
   logger.info('Received request to get exam answers', { examId });
-  
+
   try {
     // Check if exam exists
     const examInfo = await redisClient.getExamInfo(examId);
-    
+
     if (!examInfo) {
       logger.error(`Exam not found with ID: ${examId}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Not Found',
-        message: 'Exam not found' 
+        message: 'Exam not found',
       });
     }
-    
+
     // Get answers path directly from the exam info config
     if (!examInfo.config || !examInfo.config.answers) {
       logger.error(`Answers path not found in config for exam: ${examId}`);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Configuration Error',
-        message: 'Answers path not defined in exam configuration'
+        message: 'Answers path not defined in exam configuration',
       });
     }
-    
+
     const answersFilePath = examInfo.config.answers;
     const fullAnswersPath = path.join(process.cwd(), answersFilePath);
-    
+
     if (!fs.existsSync(fullAnswersPath)) {
       logger.error(`Answers file not found at path: ${fullAnswersPath}`);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'File Not Found',
-        message: 'Exam answers file not found'
+        message: 'Exam answers file not found',
       });
     }
-    
-    logger.info(`Sending answers file for exam ${examId} from path ${fullAnswersPath}`);
-    
+
+    logger.info(
+      `Sending answers file for exam ${examId} from path ${fullAnswersPath}`
+    );
+
     // Send the file directly instead of a JSON response
     return res.sendFile(fullAnswersPath);
   } catch (error) {
     logger.error('Error retrieving exam answers', { error: error.message });
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Failed to retrieve exam answers',
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -339,20 +350,20 @@ async function getExamAnswers(req, res) {
  */
 async function getExamStatus(req, res) {
   const examId = req.params.examId;
-  
+
   logger.info('Received request to get exam status', { examId });
-  
+
   try {
     // Check if exam exists
     const examInfo = await redisClient.getExamInfo(examId);
     //get exam status form redis
     const examStatus = await redisClient.getExamStatus(examId);
-    
+
     if (!examInfo) {
       logger.error(`Exam not found with ID: ${examId}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Not Found',
-        message: 'Exam not found' 
+        message: 'Exam not found',
       });
     }
 
@@ -361,13 +372,16 @@ async function getExamStatus(req, res) {
       id: examId,
       status: examStatus || 'UNKNOWN',
       warmUpTimeInSeconds: examInfo.warmUpTimeInSeconds || 30,
-      message: examStatus === 'READY' ? 'Exam environment is ready' : 'Exam environment is being prepared'
+      message:
+        examStatus === 'READY'
+          ? 'Exam environment is ready'
+          : 'Exam environment is being prepared',
     });
   } catch (error) {
     logger.error('Error retrieving exam status', { error: error.message });
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Failed to retrieve exam status',
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -379,27 +393,27 @@ async function getExamStatus(req, res) {
  */
 async function getExamResult(req, res) {
   const examId = req.params.examId;
-  
+
   logger.info('Received request to get exam result', { examId });
-  
+
   const result = await examService.getExamResult(examId);
-  
+
   if (!result.success) {
     // Handle the case when result isn't found
     if (result.error === 'Not Found') {
       return res.status(404).json({
         error: result.error,
-        message: result.message
+        message: result.message,
       });
     }
-    
+
     // Handle other errors
     return res.status(500).json({
       error: result.error,
-      message: result.message
+      message: result.message,
     });
   }
-  
+
   return res.status(200).json(result);
 }
 
@@ -411,56 +425,56 @@ async function getExamResult(req, res) {
 async function updateExamEvents(req, res) {
   const examId = req.params.examId;
   const { events } = req.body;
-  
+
   logger.info('Received request to update exam events', { examId, events });
-  
+
   try {
     // Get the current exam info
     const examInfo = await redisClient.getExamInfo(examId);
-    
+
     if (!examInfo) {
       logger.error(`Exam not found with ID: ${examId}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Not Found',
-        message: 'Exam not found' 
+        message: 'Exam not found',
       });
     }
-    
+
     // Update the events in the exam info
     if (!examInfo.events) {
       examInfo.events = {};
     }
-    
+
     // Merge the events from the request with existing events
     examInfo.events = {
       ...examInfo.events,
-      ...events
+      ...events,
     };
-    
+
     // send metrics to metric server
     MetricService.sendMetrics(examId, {
       event: {
-        ...examInfo.events
-      }
+        ...examInfo.events,
+      },
     });
 
     // Update the exam info in Redis
     await redisClient.updateExamInfo(examId, examInfo);
-    
+
     // Return success response with the same structure as other endpoints
     return res.status(200).json({
       success: true,
       data: {
         id: examId,
-        message: 'Exam events updated successfully'
-      }
+        message: 'Exam events updated successfully',
+      },
     });
   } catch (error) {
     logger.error('Error updating exam events', { error: error.message });
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
       error: 'Failed to update exam events',
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -473,22 +487,27 @@ async function updateExamEvents(req, res) {
 async function submitMetrics(req, res) {
   const examId = req.params.examId;
   const feedbackData = req.body;
-  
-  logger.info('Received feedback metrics submission', { examId, type: feedbackData.type });
-  
+
+  logger.info('Received feedback metrics submission', {
+    examId,
+    type: feedbackData.type,
+  });
+
   try {
     // Send the feedback data to the metric service
-    const result = await MetricService.sendMetrics(examId, { event: { ...feedbackData } });
-    
-    return res.status(200).json({ 
+    const result = await MetricService.sendMetrics(examId, {
+      event: { ...feedbackData },
+    });
+
+    return res.status(200).json({
       success: true,
-      message: 'Feedback submitted successfully'
+      message: 'Feedback submitted successfully',
     });
   } catch (error) {
     logger.error('Error submitting feedback metrics', { error: error.message });
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Failed to submit feedback',
-      message: error.message
+      message: error.message,
     });
   }
 }
@@ -505,5 +524,5 @@ module.exports = {
   getExamStatus,
   getExamResult,
   updateExamEvents,
-  submitMetrics
-}; 
+  submitMetrics,
+};

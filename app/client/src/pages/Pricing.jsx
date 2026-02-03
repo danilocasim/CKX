@@ -1,10 +1,14 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+// Duration hours must match backend pass_types (migrations/002_access_passes.sql)
 const PASSES = [
   {
     name: '38 Hours Access Pass',
     desc: 'Perfect when your exam is within a day',
+    durationHours: 38,
+    accessTimeLabel: '38 hours full access',
     price: '$4.99',
     original: '$9.99',
     discount: 'Save 50%',
@@ -13,6 +17,8 @@ const PASSES = [
   {
     name: '1 Week Access Pass',
     desc: 'Great for focused preparation',
+    durationHours: 168,
+    accessTimeLabel: '1 week (168 hours) full access',
     price: '$19.99',
     original: '$29.99',
     discount: 'Save 33%',
@@ -21,6 +27,8 @@ const PASSES = [
   {
     name: '2 Weeks Access Pass',
     desc: 'Ideal when you have a week to master the materials',
+    durationHours: 336,
+    accessTimeLabel: '2 weeks (336 hours) full access',
     price: '$29.99',
     original: '$49.99',
     discount: 'Save 40%',
@@ -50,14 +58,15 @@ const FAQ = [
 
 export default function Pricing() {
   const { fetchWithAuth, isAuthenticated } = useAuth();
+  const [checkoutError, setCheckoutError] = useState(null);
 
   async function initiateCheckout(passTypeId) {
+    setCheckoutError(null);
     if (!isAuthenticated()) {
       window.location.href =
         '/login?redirect=' + encodeURIComponent('/pricing');
       return;
     }
-    const token = localStorage.getItem('accessToken');
     try {
       const response = await fetchWithAuth(
         '/facilitator/api/v1/billing/checkout',
@@ -72,15 +81,33 @@ export default function Pricing() {
         if (data.data?.url) window.location.href = data.data.url;
       } else {
         const err = await response.json().catch(() => ({}));
-        alert(err.message || 'Failed to initiate checkout');
+        setCheckoutError(err.message || 'Failed to initiate checkout.');
       }
     } catch {
-      alert('Failed to initiate checkout. Please try again.');
+      setCheckoutError('Failed to initiate checkout. Please try again.');
     }
   }
 
   return (
     <>
+      {checkoutError && (
+        <div className='max-w-6xl mx-auto px-4 pt-24'>
+          <div
+            role='alert'
+            className='rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-amber-200 text-sm flex items-center justify-between gap-4'
+          >
+            <span>{checkoutError}</span>
+            <button
+              type='button'
+              onClick={() => setCheckoutError(null)}
+              className='shrink-0 text-amber-400 hover:text-amber-200'
+              aria-label='Dismiss'
+            >
+              <i className='fas fa-times' />
+            </button>
+          </div>
+        </div>
+      )}
       <section className='pt-28 pb-16 px-4 bg-gradient-to-b from-bg-card to-bg-dark'>
         <div className='max-w-4xl mx-auto text-center'>
           <h1 className='text-3xl md:text-4xl font-bold mb-3'>
@@ -226,7 +253,10 @@ export default function Pricing() {
                     </div>
                   )}
                   <h3 className='font-semibold text-lg'>{pass.name}</h3>
-                  <p className='text-zinc-500 text-sm mb-3'>{pass.desc}</p>
+                  <p className='text-zinc-500 text-sm mb-2'>{pass.desc}</p>
+                  <p className='text-accent-green text-sm font-medium mb-3'>
+                    {pass.accessTimeLabel}
+                  </p>
                   <ul className='text-sm text-zinc-400 mb-4 space-y-1'>
                     <li>
                       <i className='fas fa-check text-accent-green mr-2' /> Full
