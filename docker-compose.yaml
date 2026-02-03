@@ -6,25 +6,25 @@ services:
       context: ./remote-desktop
     hostname: terminal
     expose:
-      - "5901" # VNC port (internal only)
-      - "6901" # Web VNC port (internal only)
+      - '5901' # VNC port (internal only)
+      - '6901' # Web VNC port (internal only)
     environment:
       - VNC_PW=bakku-the-wizard
       - VNC_PASSWORD=bakku-the-wizard
       - VNC_VIEW_ONLY=false
       - VNC_RESOLUTION=1280x800
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6901/"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:6901/']
       interval: 10s
       timeout: 5s
       retries: 3
     deploy:
       resources:
         limits:
-          cpus: "1"
+          cpus: '1'
           memory: 1G
         reservations:
-          cpus: "0.5"
+          cpus: '0.5'
           memory: 512M
     networks:
       - ckx-network
@@ -35,7 +35,7 @@ services:
     build:
       context: ./app
     expose:
-      - "3000" # Only exposed to internal network
+      - '3000' # Only exposed to internal network
     environment:
       - VNC_SERVICE_HOST=remote-desktop
       - VNC_SERVICE_PORT=6901
@@ -49,13 +49,13 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.5"
+          cpus: '0.5'
           memory: 512M
         reservations:
-          cpus: "0.2"
+          cpus: '0.2'
           memory: 256M
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3000/"]
+      test: ['CMD', 'wget', '-q', '-O', '-', 'http://localhost:3000/']
       interval: 10s
       timeout: 5s
       retries: 3
@@ -74,17 +74,17 @@ services:
       - facilitator
       - k8s-api-server
     ports:
-      - "30080:80" # Expose Nginx on port 30080
+      - '30080:80' # Expose Nginx on port 30080
     deploy:
       resources:
         limits:
-          cpus: "0.2"
+          cpus: '0.2'
           memory: 256M
         reservations:
-          cpus: "0.1"
+          cpus: '0.1'
           memory: 128M
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/"]
+      test: ['CMD', 'curl', '-f', 'http://localhost/']
       interval: 10s
       timeout: 5s
       retries: 3
@@ -100,20 +100,20 @@ services:
     privileged: true
     # No external port mappings - only accessible internally
     expose:
-      - "22" # SSH port (internal only)
+      - '22' # SSH port (internal only)
     volumes:
       - kube-config:/home/candidate/.kube # Shared volume for Kubernetes config
     deploy:
       resources:
         limits:
-          cpus: "1"
+          cpus: '1'
         reservations:
-          cpus: "0.5"
+          cpus: '0.5'
           memory: 512M
     networks:
       - ckx-network
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "22"]
+      test: ['CMD', 'nc', '-z', 'localhost', '22']
       interval: 10s
       timeout: 5s
       retries: 3
@@ -125,19 +125,19 @@ services:
       context: ./remote-terminal
     hostname: remote-terminal
     expose:
-      - "22" # SSH port (internal only)
+      - '22' # SSH port (internal only)
     deploy:
       resources:
         limits:
-          cpus: "0.5"
+          cpus: '0.5'
           memory: 512M
         reservations:
-          cpus: "0.2"
+          cpus: '0.2'
           memory: 256M
     networks:
       - ckx-network
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "22"]
+      test: ['CMD', 'nc', '-z', 'localhost', '22']
       interval: 10s
       timeout: 5s
       retries: 3
@@ -151,22 +151,22 @@ services:
     hostname: k8s-api-server
     privileged: true # Required for running containers inside KIND
     expose:
-      - "6443"
-      - "22"
+      - '6443'
+      - '22'
     volumes:
       - kube-config:/home/candidate/.kube # Shared volume for Kubernetes config
     deploy:
       resources:
         limits:
-          cpus: "2"
+          cpus: '2'
           memory: 4G
         reservations:
-          cpus: "1"
+          cpus: '1'
           memory: 2G
     networks:
       - ckx-network
     healthcheck:
-      test: ["CMD", "ls", "/ready"]
+      test: ['CMD', 'ls', '/ready']
       interval: 30s
       timeout: 5s
       retries: 20
@@ -176,22 +176,22 @@ services:
   redis:
     image: redis:alpine
     hostname: redis
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ['redis-server', '--appendonly', 'yes']
     expose:
-      - "6379"
+      - '6379'
     restart: unless-stopped
     networks:
       - ckx-network
     deploy:
       resources:
         limits:
-          cpus: "0.3"
+          cpus: '0.3'
           memory: 256M
         reservations:
-          cpus: "0.1"
+          cpus: '0.1'
           memory: 128M
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 3
@@ -208,20 +208,20 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./facilitator/migrations:/docker-entrypoint-initdb.d:ro
     expose:
-      - "5432"
+      - '5432'
     restart: unless-stopped
     networks:
       - ckx-network
     deploy:
       resources:
         limits:
-          cpus: "0.5"
+          cpus: '0.5'
           memory: 512M
         reservations:
-          cpus: "0.2"
+          cpus: '0.2'
           memory: 256M
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ckx}"]
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-ckx}']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -234,14 +234,14 @@ services:
       dockerfile: Dockerfile
     hostname: facilitator
     expose:
-      - "3000"
+      - '3000'
     environment:
       - PORT=3000
       - NODE_ENV=prod
       - SSH_HOST=jumphost
       - SSH_PORT=22
       - SSH_USERNAME=candidate
-      - SSH_PASSWORD=  # Empty password for jumphost which allows passwordless auth
+      - SSH_PASSWORD= # Empty password for jumphost which allows passwordless auth
       - LOG_LEVEL=info
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -258,9 +258,9 @@ services:
       - JWT_REFRESH_EXPIRY=7d
       - BCRYPT_ROUNDS=12
       # Stripe Payment Configuration (Phase 4)
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
-      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_SECRET_KEY=sk_test_51SknIFK4C8jOyCJwb0zidigdDwTKxWMx7wDlDlmdgbkwsdbzX2HkXp8W6KX2Vtq94zBqGk6kjTbpBLpQmvq3fs1W00PgK3O5di
+      - STRIPE_PUBLISHABLE_KEY=pk_test_51SknIFK4C8jOyCJwoWDcL78m3LGYVrjcPnOr6yGQtDiG4B0xmibdX9wJ3Tj2QgcrWZl3ilLROdEDRumhaaIgZfh700HXUuPsxl
+      - STRIPE_WEBHOOK_SECRET=whsec_338e054c19cddacf9595e8098557021197a6921e8fa1966dfa66f2e9c09a91e4
       - APP_URL=${APP_URL:-http://localhost:30080}
     restart: unless-stopped
     depends_on:
@@ -272,13 +272,13 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.5"
+          cpus: '0.5'
           memory: 512M
         reservations:
-          cpus: "0.2"
+          cpus: '0.2'
           memory: 256M
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3000"]
+      test: ['CMD', 'wget', '-q', '-O', '-', 'http://localhost:3000']
       interval: 10s
       timeout: 5s
       retries: 3
