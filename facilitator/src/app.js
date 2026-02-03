@@ -162,6 +162,10 @@ countdownService.initialize(io);
 // Initialize Redis connection and port allocator
 (async () => {
   try {
+    // Validate configuration (fails fast in production if misconfigured)
+    config.validate(logger);
+    logger.info('Configuration validated successfully');
+
     await redisClient.connect();
     logger.info('Redis connected successfully');
 
@@ -178,6 +182,9 @@ countdownService.initialize(io);
     }
   } catch (error) {
     logger.error(`Initialization failed: ${error.message}`);
+    if (config.env === 'production') {
+      process.exit(1);
+    }
   }
 })();
 

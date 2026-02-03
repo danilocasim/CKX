@@ -91,4 +91,18 @@ export const examApi = {
   endExam: (examId) => api.post(`/exams/${examId}/end`),
 };
 
+// Billing API
+export const billingApi = {
+  getPlans: () => api.get('/billing/plans'),
+  createCheckout: (passTypeId) => api.post('/billing/checkout', { passTypeId }),
+  verifyCheckout: (sessionId) => api.get(`/billing/verify/${sessionId}`),
+};
+
+// Access API
+export const accessApi = {
+  getStatus: () => api.get('/access/status'),
+  getPasses: () => api.get('/access/passes'),
+  activatePass: (passId) => api.post(`/access/activate/${passId}`),
+};
+
 export default api;

@@ -2,7 +2,7 @@ const express = require('express');
 const examController = require('../controllers/examController');
 const { validateCreateExam, validateEvaluateExam, validateExamEvents } = require('../middleware/validators');
 const { optionalAuth } = require('../middleware/authMiddleware');
-const { requireFullAccess } = require('../middleware/accessMiddleware');
+const { requireFullAccess, requireSessionAccess } = require('../middleware/accessMiddleware');
 
 const router = express.Router();
 
@@ -37,16 +37,16 @@ router.get('/:examId/assets', examController.getExamAssets);
 /**
  * @route GET /api/v1/exams/:examId/questions
  * @desc Get exam questions
- * @access Public
+ * @access Public (mock exams) / Access pass required (full exams)
  */
-router.get('/:examId/questions', examController.getExamQuestions);
+router.get('/:examId/questions', requireSessionAccess, examController.getExamQuestions);
 
 /**
  * @route POST /api/v1/exams/:examId/evaluate
  * @desc Evaluate an exam
- * @access Public
+ * @access Public (mock exams) / Access pass required (full exams)
  */
-router.post('/:examId/evaluate', validateEvaluateExam, examController.evaluateExam);
+router.post('/:examId/evaluate', requireSessionAccess, validateEvaluateExam, examController.evaluateExam);
 
 /**
  * @route POST /api/v1/exams/:examId/terminate
@@ -79,9 +79,9 @@ router.get('/:examId/result', examController.getExamResult);
 /**
  * @route POST /api/v1/exams/:examId/events
  * @desc Update exam events
- * @access Public
+ * @access Public (mock exams) / Access pass required (full exams)
  */
-router.post('/:examId/events', validateExamEvents, examController.updateExamEvents);
+router.post('/:examId/events', requireSessionAccess, validateExamEvents, examController.updateExamEvents);
 
 /**
  * @route POST /api/v1/exams/metrics/:examId

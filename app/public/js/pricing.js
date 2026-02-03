@@ -101,9 +101,9 @@ function showAuthModal() {
 
 /**
  * Initiate Stripe checkout
- * @param {string} passType - Type of pass to purchase
+ * @param {string} passTypeId - Type of pass to purchase (e.g., '38_hours', '1_week', '2_weeks')
  */
-async function initiateCheckout(passType) {
+async function initiateCheckout(passTypeId) {
   try {
     const token = localStorage.getItem('accessToken');
     const response = await fetch('/facilitator/api/v1/billing/checkout', {
@@ -112,14 +112,14 @@ async function initiateCheckout(passType) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ passType })
+      body: JSON.stringify({ passTypeId })
     });
 
     if (response.ok) {
       const data = await response.json();
       // Redirect to Stripe checkout
-      if (data.data.checkoutUrl) {
-        window.location.href = data.data.checkoutUrl;
+      if (data.data.url) {
+        window.location.href = data.data.url;
       }
     } else {
       const error = await response.json();

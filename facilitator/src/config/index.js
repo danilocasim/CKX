@@ -1,5 +1,41 @@
 require('dotenv').config();
 
+/**
+ * Validate Stripe configuration
+ * @param {Object} stripeConfig - Stripe configuration object
+ * @param {string} env - Current environment
+ * @returns {Object} Validation result with warnings and errors
+ */
+function validateStripeConfig(stripeConfig, env) {
+  const warnings = [];
+  const errors = [];
+  const isProduction = env === 'production';
+
+  if (!stripeConfig.secretKey) {
+    const msg = 'STRIPE_SECRET_KEY is not configured - payment features will be disabled';
+    if (isProduction) {
+      errors.push(msg);
+    } else {
+      warnings.push(msg);
+    }
+  }
+
+  if (!stripeConfig.webhookSecret) {
+    const msg = 'STRIPE_WEBHOOK_SECRET is not configured - webhook verification will fail';
+    if (isProduction) {
+      errors.push(msg);
+    } else {
+      warnings.push(msg);
+    }
+  }
+
+  if (!stripeConfig.publishableKey) {
+    warnings.push('STRIPE_PUBLISHABLE_KEY is not configured - checkout UI may not work');
+  }
+
+  return { warnings, errors, isConfigured: !!stripeConfig.secretKey };
+}
+
 const config = {
   port: process.env.PORT || 3000,
   env: process.env.NODE_ENV || 'development',
@@ -48,6 +84,31 @@ const config = {
   app: {
     url: process.env.APP_URL || 'http://localhost:30080',
   },
+};
+
+/**
+ * Validate configuration at startup
+ * Logs warnings and throws errors for critical misconfigurations
+ * @param {Object} logger - Logger instance
+ */
+config.validate = function(logger) {
+  const stripeValidation = validateStripeConfig(this.stripe, this.env);
+
+  // Log warnings
+  stripeValidation.warnings.forEach(warning => {
+    logger.warn(`[Config] ${warning}`);
+  });
+
+  // Throw errors in production
+  if (stripeValidation.errors.length > 0) {
+    stripeValidation.errors.forEach(error => {
+      logger.error(`[Config] ${error}`);
+    });
+    throw new Error(`Configuration errors: ${stripeValidation.errors.join('; ')}`);
+  }
+
+  // Store validation results
+  this.stripe.isConfigured = stripeValidation.isConfigured;
 };
 
 module.exports = config; 

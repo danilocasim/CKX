@@ -885,12 +885,82 @@ See `example.env` for full configuration template.
 3. **Webhook before JSON parser**: Stripe webhook registered before `express.json()` for signature verification
 4. **Pass stacking**: Future enhancement - currently only one active pass at a time
 
-### 12.6 Remaining Work
+### 12.6 Session Access Enforcement (2026-02-03)
 
-- [ ] Client-side integration (pricing page, access status display)
+Added server-side validation for ongoing exam sessions to prevent access bypass:
+
+**Changes:**
+
+1. **Stripe Config Validation at Startup** (`facilitator/src/config/index.js`)
+   - Added `validateStripeConfig()` function
+   - Warns in development if Stripe keys missing
+   - Fails fast in production if misconfigured
+   - Called during app initialization in `app.js`
+
+2. **Session Access Middleware** (`facilitator/src/middleware/accessMiddleware.js`)
+   - Added `requireSessionAccess` middleware
+   - Validates access pass is still valid (expires_at > NOW()) for ongoing sessions
+   - Mock exams bypass validation
+   - Returns 403 with clear error if access expired
+
+3. **Access Service Enhancement** (`facilitator/src/services/accessService.js`)
+   - Added `validatePassById(passId)` function
+   - Used by session middleware to check pass validity by ID
+
+4. **Exam Routes Updated** (`facilitator/src/routes/examRoutes.js`)
+   - Applied `requireSessionAccess` to:
+     - `GET /:examId/questions` - viewing questions during exam
+     - `POST /:examId/evaluate` - evaluating solutions
+     - `POST /:examId/events` - updating exam events
+
+**Security Enforcement Points:**
+
+| Checkpoint | Middleware | When |
+|------------|------------|------|
+| Exam creation | `requireFullAccess` | Before exam starts |
+| Get questions | `requireSessionAccess` | During exam |
+| Evaluate | `requireSessionAccess` | During exam |
+| Update events | `requireSessionAccess` | During exam |
+
+**Response on Access Denial:**
+
+```json
+{
+  "success": false,
+  "error": "Access Expired",
+  "message": "Your access pass has expired. Please purchase a new pass to continue.",
+  "data": {
+    "expired": true,
+    "pricing": "/pricing"
+  }
+}
+```
+
+### 12.7 Frontend Integration (2026-02-03)
+
+**Sailor-Client (React):**
+
+| File | Changes |
+|------|---------|
+| `sailor-client/client/src/services/api.js` | Added `billingApi` and `accessApi` |
+| `sailor-client/client/src/pages/Pricing.jsx` | Wired checkout button to API |
+| `sailor-client/client/vite.config.js` | Made proxy URL configurable via `VITE_BACKEND_URL` |
+
+**CKX Vanilla JS:**
+
+| File | Changes |
+|------|---------|
+| `app/public/payment-success.html` | Created payment success page |
+| `app/public/js/pricing.js` | Fixed API field names (`passTypeId`, `url`) |
+| `app/services/route-service.js` | Added `/payment/success` and `/pricing` routes |
+
+### 12.8 Remaining Work
+
+- [ ] Test full payment flow end-to-end
 - [ ] Pass expiration cron job
+- [ ] Access status display in exam header
+- [ ] Low-time warning toast
 - [ ] Email notifications for expiring passes
-- [ ] Payment success/cancel pages
 
 ---
 

@@ -235,6 +235,62 @@ async function expireOldPasses() {
   return result.rows;
 }
 
+/**
+ * Validate an access pass by ID (for ongoing session validation)
+ * @param {string} passId - The access pass ID
+ * @returns {Promise<Object>} Validation result
+ */
+async function validatePassById(passId) {
+  const result = await db.query(`
+    SELECT * FROM access_passes
+    WHERE id = $1
+  `, [passId]);
+
+  if (result.rows.length === 0) {
+    return {
+      isValid: false,
+      reason: 'Access pass not found',
+    };
+  }
+
+  const pass = result.rows[0];
+
+  // Check status
+  if (pass.status === 'expired') {
+    return {
+      isValid: false,
+      reason: 'Access pass has expired',
+    };
+  }
+
+  if (pass.status !== 'activated') {
+    return {
+      isValid: false,
+      reason: 'Access pass is not active',
+    };
+  }
+
+  // Check expiry time
+  if (new Date(pass.expires_at) <= new Date()) {
+    return {
+      isValid: false,
+      reason: 'Access pass has expired',
+    };
+  }
+
+  const hoursRemaining = Math.ceil(
+    (new Date(pass.expires_at) - new Date()) / (1000 * 60 * 60)
+  );
+
+  return {
+    isValid: true,
+    passId: pass.id,
+    passType: pass.pass_type,
+    expiresAt: pass.expires_at,
+    hoursRemaining,
+  };
+}
+
 module.exports = {
   getPassTypes,
   getPassType,
@@ -246,4 +302,5 @@ module.exports = {
   findPassByCheckoutSession,
   updatePassPayment,
   expireOldPasses,
+  validatePassById,
 };

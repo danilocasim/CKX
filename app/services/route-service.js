@@ -22,10 +22,18 @@ class RouteService {
             // Special handling for exam page
             if (req.path === '/exam') {
                 res.sendFile(path.join(this.publicService.getPublicDir(), 'exam.html'));
-            } 
+            }
             // Special handling for results page
             else if (req.path === '/results') {
                 res.sendFile(path.join(this.publicService.getPublicDir(), 'results.html'));
+            }
+            // Special handling for payment success page
+            else if (req.path === '/payment/success') {
+                res.sendFile(path.join(this.publicService.getPublicDir(), 'payment-success.html'));
+            }
+            // Special handling for pricing page
+            else if (req.path === '/pricing') {
+                res.sendFile(path.join(this.publicService.getPublicDir(), 'pricing.html'));
             }
             else {
                 res.sendFile(path.join(this.publicService.getPublicDir(), 'index.html'));

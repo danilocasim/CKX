@@ -5,6 +5,7 @@
 
 const accessService = require('../services/accessService');
 const logger = require('../utils/logger');
+const redisClient = require('../utils/redisClient');
 const fs = require('fs');
 const path = require('path');
 
@@ -131,7 +132,86 @@ async function checkAccess(req, res, next) {
   }
 }
 
+/**
+ * Middleware to validate ongoing session access for full exams
+ * - Checks if the exam's associated access pass is still valid
+ * - Mock exams bypass this check
+ * - Returns 403 if access has expired
+ */
+async function requireSessionAccess(req, res, next) {
+  const examId = req.params.examId;
+
+  if (!examId) {
+    return res.status(400).json({
+      success: false,
+      error: 'Bad Request',
+      message: 'examId is required',
+    });
+  }
+
+  try {
+    // Get exam info from Redis
+    const examInfo = await redisClient.getExamInfo(examId);
+
+    if (!examInfo) {
+      return res.status(404).json({
+        success: false,
+        error: 'Not Found',
+        message: 'Exam not found',
+      });
+    }
+
+    // Mock exams bypass access validation
+    if (examInfo.examType === 'mock' || examInfo.isFree) {
+      logger.debug('Mock exam session - access check bypassed', { examId });
+      return next();
+    }
+
+    // Full exams require valid access pass
+    const accessPassId = examInfo.accessPassId;
+
+    if (!accessPassId) {
+      // Legacy exam without access pass tracking - allow for now
+      logger.warn('Full exam without accessPassId - allowing (legacy)', { examId });
+      return next();
+    }
+
+    // Validate the access pass is still valid
+    const passValid = await accessService.validatePassById(accessPassId);
+
+    if (!passValid.isValid) {
+      logger.info('Session access denied - pass expired or invalid', {
+        examId,
+        accessPassId,
+        reason: passValid.reason,
+      });
+
+      return res.status(403).json({
+        success: false,
+        error: 'Access Expired',
+        message: passValid.reason || 'Your access pass has expired. Please purchase a new pass to continue.',
+        data: {
+          expired: true,
+          pricing: '/pricing',
+        },
+      });
+    }
+
+    // Attach access info for logging
+    req.accessPass = passValid;
+    next();
+  } catch (error) {
+    logger.error('Session access check failed', { error: error.message, examId });
+    return res.status(500).json({
+      success: false,
+      error: 'Error',
+      message: 'Failed to verify session access',
+    });
+  }
+}
+
 module.exports = {
   requireFullAccess,
   checkAccess,
+  requireSessionAccess,
 };

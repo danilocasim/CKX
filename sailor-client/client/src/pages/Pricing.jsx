@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
+import { billingApi } from '../services/api';
 
 const plans = [
   {
@@ -62,14 +64,33 @@ const faqs = [
 
 export default function Pricing() {
   const { isAuthenticated } = useAuth();
+  const [loading, setLoading] = useState(null);
+  const [error, setError] = useState(null);
 
-  const handlePurchase = (planId) => {
+  const handlePurchase = async (planId) => {
     if (!isAuthenticated) {
       window.location.href = '/login?redirect=/pricing';
       return;
     }
-    // TODO: Implement checkout
-    alert(`Initiating checkout for ${planId}`);
+
+    setLoading(planId);
+    setError(null);
+
+    try {
+      const response = await billingApi.createCheckout(planId);
+
+      if (response.data.success && response.data.data.url) {
+        // Redirect to Stripe checkout
+        window.location.href = response.data.data.url;
+      } else {
+        setError('Failed to create checkout session');
+      }
+    } catch (err) {
+      console.error('Checkout error:', err);
+      setError(err.response?.data?.message || 'Failed to initiate checkout. Please try again.');
+    } finally {
+      setLoading(null);
+    }
   };
 
   return (
@@ -157,6 +178,13 @@ export default function Pricing() {
 
             {/* Right Column: Pricing Cards */}
             <div className="lg:col-span-2 space-y-6">
+              {/* Error Message */}
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg">
+                  {error}
+                </div>
+              )}
+
               {/* Free Trial */}
               <div className="card bg-gradient-to-r from-sailor-card to-sailor-dark border-primary-500/30">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -211,9 +239,10 @@ export default function Pricing() {
                       </div>
                       <button
                         onClick={() => handlePurchase(plan.id)}
-                        className={`btn ${plan.popular ? 'btn-primary' : 'btn-secondary'} whitespace-nowrap`}
+                        disabled={loading === plan.id}
+                        className={`btn ${plan.popular ? 'btn-primary' : 'btn-secondary'} whitespace-nowrap disabled:opacity-50`}
                       >
-                        Buy Now
+                        {loading === plan.id ? 'Processing...' : 'Buy Now'}
                       </button>
                     </div>
                   </div>
