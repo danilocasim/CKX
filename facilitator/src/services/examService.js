@@ -12,6 +12,7 @@ const jumphostService = require('./jumphostService');
 const MetricService = require('./metricService');
 const portAllocator = require('./portAllocator');
 const countdownService = require('./countdownService');
+const terminalSessionService = require('./terminalSessionService');
 
 // Configuration for multi-session limits
 const MAX_CONCURRENT_SESSIONS = parseInt(
@@ -106,24 +107,54 @@ async function createExam(examData) {
     examData.config = JSON.parse(examConfig);
     delete examData.answers;
 
-    //persist created at time
+    // Persist created at time and session lifecycle (started_at, expires_at, total_allocated_seconds)
     examData.createdAt = new Date().toISOString();
-    // Store exam information in Redis
-    await redisClient.persistExamInfo(examId, examData);
+    const startedAt = examData.startedAt || examData.createdAt;
+    const expiresAt =
+      examData.expiresAt ||
+      new Date(Date.now() + 2 * 3600 * 1000).toISOString();
+    const totalAllocatedSeconds = examData.totalAllocatedSeconds ?? 2 * 3600;
+    const ttlSeconds = Math.min(
+      Math.max(
+        60,
+        Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000)
+      ),
+      48 * 3600
+    );
 
-    // Set initial exam status
-    await redisClient.persistExamStatus(examId, 'CREATED');
+    // Store exam information in Redis (with session expiry so keys don't outlive session)
+    await redisClient.persistExamInfo(examId, examData, ttlSeconds);
+    await redisClient.persistExamStatus(examId, 'CREATED', ttlSeconds);
 
-    // Register as active session with allocated ports and userId for ownership
-    await redisClient.registerSession(examId, {
-      labId: examData.config?.lab,
-      category: examData.category,
-      createdAt: examData.createdAt,
-      ports: sessionPorts,
-      userId: userId,
-    });
+    // Register as active session with ports, userId, and lifecycle fields
+    await redisClient.registerSession(
+      examId,
+      {
+        labId: examData.config?.lab,
+        category: examData.category,
+        createdAt: examData.createdAt,
+        ports: sessionPorts,
+        userId,
+        started_at: startedAt,
+        expires_at: expiresAt,
+        total_allocated_seconds: totalAllocatedSeconds,
+      },
+      ttlSeconds
+    );
 
     logger.info(`Exam created successfully with ID: ${examId}`);
+
+    // One terminal session per exam, bound to user_id + exam_session_id (isolated per user)
+    if (userId != null) {
+      try {
+        await terminalSessionService.createOrGet(examId, userId, expiresAt);
+      } catch (termErr) {
+        logger.error(`Failed to create terminal session for exam ${examId}`, {
+          error: termErr.message,
+        });
+        // Do not fail exam creation; terminal may be unavailable
+      }
+    }
 
     // Determine number of nodes required for the exam (default to 1 if not specified)
     const nodeCount = examData.config.workerNodes || 1;
@@ -323,7 +354,7 @@ async function getCurrentExam(userId) {
       };
     }
 
-    // Anonymous: return first active exam with no userId (mock) or first any for backward compat
+    // Anonymous: only return exams with no userId (mock). Never return another user's exam.
     for (const examId of sessionIds) {
       const examInfo = await redisClient.getExamInfo(examId);
       if (examInfo && (examInfo.userId == null || examInfo.userId === '')) {
@@ -338,16 +369,10 @@ async function getCurrentExam(userId) {
         };
       }
     }
-    const examId = sessionIds[0];
-    const examInfo = await redisClient.getExamInfo(examId);
-    const examStatus = await redisClient.getExamStatus(examId);
     return {
-      success: true,
-      data: {
-        id: examId,
-        status: examStatus,
-        info: examInfo,
-      },
+      success: false,
+      error: 'Not Found',
+      message: 'No current exam is active for this user',
     };
   } catch (error) {
     logger.error('Error retrieving current exam', { error: error.message });
@@ -587,16 +612,21 @@ async function getExamResult(examId) {
 /**
  * End an exam
  * Multi-session support: Each exam can be ended independently.
+ * Defense-in-depth: requires userId and verifies ownership (session_id + user_id).
  *
  * @param {string} examId - The exam ID (sessionId)
+ * @param {string|number|null} userId - Authenticated user id (null for mock/legacy)
  * @returns {Promise<Object>} Result object with success status and data
  */
-async function endExam(examId) {
+async function endExam(examId, userId) {
   try {
-    // Verify exam exists before attempting cleanup
-    const examInfo = await redisClient.getExamInfo(examId);
+    // Always verify ownership: fetch by (examId + userId), never by examId alone
+    const examInfo = await redisClient.getExamInfoForUser(examId, userId);
     if (!examInfo) {
-      logger.warn(`Attempted to end non-existent exam ${examId}`);
+      logger.warn(
+        `Attempted to end non-existent or unauthorized exam ${examId}`,
+        { userId }
+      );
       return {
         success: false,
         error: 'Not Found',
@@ -639,6 +669,15 @@ async function endExam(examId) {
       });
     }
 
+    // Terminate terminal session so no one can connect to this exam's terminal
+    try {
+      await terminalSessionService.terminate(examId);
+    } catch (termErr) {
+      logger.error(`Error terminating terminal session for ${examId}`, {
+        error: termErr.message,
+      });
+    }
+
     logger.info(`Exam ${examId} completed`);
 
     return {
@@ -659,13 +698,40 @@ async function endExam(examId) {
   }
 }
 
+/**
+ * Extend the active exam session's expiry for a user (e.g. when they activate a new pass).
+ * Payment/time extension: applies immediately to the active session.
+ * @param {string|number} userId - The user ID
+ * @param {string} newExpiresAt - ISO date string for new expiry
+ * @returns {Promise<boolean>} - True if session was found and extended
+ */
+async function extendActiveSessionIfAny(userId, newExpiresAt) {
+  try {
+    const result = await getCurrentExam(userId);
+    if (!result.success || !result.data?.id) return false;
+    const examId = result.data.id;
+    const examInfo = await redisClient.getExamInfo(examId);
+    if (!examInfo || !examInfo.accessPassId) return false;
+    await redisClient.extendSessionExpiry(examId, newExpiresAt);
+    await terminalSessionService.updateExpiresAt(examId, newExpiresAt);
+    return true;
+  } catch (error) {
+    logger.error('Error extending active session', {
+      error: error.message,
+      userId,
+    });
+    return false;
+  }
+}
+
 module.exports = {
   createExam,
-  getCurrentExam, // @deprecated - use getActiveExams()
-  getActiveExams, // NEW: Multi-session support
+  getCurrentExam,
+  getActiveExams,
   getExamAssets,
   getExamQuestions,
   evaluateExam,
   endExam,
   getExamResult,
+  extendActiveSessionIfAny,
 };

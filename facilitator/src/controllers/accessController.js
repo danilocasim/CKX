@@ -4,6 +4,7 @@
  */
 
 const accessService = require('../services/accessService');
+const examService = require('../services/examService');
 const logger = require('../utils/logger');
 
 /**
@@ -19,7 +20,10 @@ async function getStatus(req, res) {
       data: access,
     });
   } catch (error) {
-    logger.error('Get access status failed', { error: error.message, userId: req.userId });
+    logger.error('Get access status failed', {
+      error: error.message,
+      userId: req.userId,
+    });
     res.status(500).json({
       success: false,
       error: 'Error',
@@ -41,7 +45,10 @@ async function getPasses(req, res) {
       data: passes,
     });
   } catch (error) {
-    logger.error('Get passes failed', { error: error.message, userId: req.userId });
+    logger.error('Get passes failed', {
+      error: error.message,
+      userId: req.userId,
+    });
     res.status(500).json({
       success: false,
       error: 'Error',
@@ -59,13 +66,32 @@ async function activatePass(req, res) {
     const { id } = req.params;
     const result = await accessService.activatePass(id, req.userId);
 
+    // Paid time extension: immediately extend active exam session if user has one
+    const newExpiresAt =
+      result.expiresAt instanceof Date
+        ? result.expiresAt.toISOString()
+        : new Date(result.expiresAt).toISOString();
+    const extended = await examService.extendActiveSessionIfAny(
+      req.userId,
+      newExpiresAt
+    );
+    if (extended) {
+      logger.info('Active session extended after pass activation', {
+        userId: req.userId,
+      });
+    }
+
     res.json({
       success: true,
       data: result,
       message: 'Pass activated successfully. Your timer has started.',
     });
   } catch (error) {
-    logger.error('Activate pass failed', { error: error.message, userId: req.userId, passId: req.params.id });
+    logger.error('Activate pass failed', {
+      error: error.message,
+      userId: req.userId,
+      passId: req.params.id,
+    });
 
     if (error.message === 'Pass not found or already activated') {
       return res.status(404).json({

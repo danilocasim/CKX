@@ -142,8 +142,13 @@ router.post(
 /**
  * @route POST /api/v1/exams/metrics/:examId
  * @desc Submit feedback metrics for an exam
- * @access Public
+ * @access Owner only (session isolation)
  */
-router.post('/metrics/:examId', examController.submitMetrics);
+router.post(
+  '/metrics/:examId',
+  optionalAuth,
+  requireExamOwnership,
+  examController.submitMetrics
+);
 
 module.exports = router;

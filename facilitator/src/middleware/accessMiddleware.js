@@ -138,10 +138,10 @@ async function checkAccess(req, res, next) {
 }
 
 /**
- * Middleware to enforce session ownership
- * - Loads exam by examId and ensures the authenticated user owns it
- * - Exams with no userId (mock/legacy) are allowed for anyone
- * - Sets req.examInfo for downstream use
+ * Middleware to enforce session ownership.
+ * Fetches exam only by (examId + userId); never by examId alone (no cross-user data).
+ * - Returns 404 if exam not found or not owned (do not leak existence).
+ * - Sets req.examInfo for downstream use.
  */
 async function requireExamOwnership(req, res, next) {
   const examId = req.params.examId;
@@ -156,8 +156,7 @@ async function requireExamOwnership(req, res, next) {
   }
 
   try {
-    const examInfo = await redisClient.getExamInfo(examId);
-
+    const examInfo = await redisClient.getExamInfoForUser(examId, userId);
     if (!examInfo) {
       return res.status(404).json({
         success: false,
@@ -165,22 +164,6 @@ async function requireExamOwnership(req, res, next) {
         message: 'Exam not found',
       });
     }
-
-    if (examInfo.userId != null && examInfo.userId !== '') {
-      if (userId == null || String(userId) !== String(examInfo.userId)) {
-        logger.warn('Session ownership denied', {
-          examId,
-          examUserId: examInfo.userId,
-          reqUserId: userId,
-        });
-        return res.status(403).json({
-          success: false,
-          error: 'Forbidden',
-          message: 'You do not have access to this exam session.',
-        });
-      }
-    }
-
     req.examInfo = examInfo;
     next();
   } catch (error) {
@@ -194,14 +177,14 @@ async function requireExamOwnership(req, res, next) {
 }
 
 /**
- * Middleware to validate ongoing session access for full exams
- * - Checks session ownership (user must own the exam)
- * - Checks if the exam's associated access pass is still valid
- * - Mock exams bypass access validation
- * - Returns 403 if access has expired
+ * Middleware to validate ongoing session access for full exams.
+ * Fetches exam only by (examId + userId); never by examId alone.
+ * - Returns 404 if exam not found or not owned.
+ * - Mock exams bypass access validation; full exams require valid pass.
  */
 async function requireSessionAccess(req, res, next) {
   const examId = req.params.examId;
+  const userId = req.userId;
 
   if (!examId) {
     return res.status(400).json({
@@ -212,9 +195,7 @@ async function requireSessionAccess(req, res, next) {
   }
 
   try {
-    // Get exam info from Redis
-    const examInfo = await redisClient.getExamInfo(examId);
-
+    const examInfo = await redisClient.getExamInfoForUser(examId, userId);
     if (!examInfo) {
       return res.status(404).json({
         success: false,
@@ -222,23 +203,7 @@ async function requireSessionAccess(req, res, next) {
         message: 'Exam not found',
       });
     }
-
-    // Session ownership: authenticated exams must be owned by this user
-    if (examInfo.userId != null && examInfo.userId !== '') {
-      const userId = req.userId;
-      if (userId == null || String(userId) !== String(examInfo.userId)) {
-        logger.warn('Session ownership denied in requireSessionAccess', {
-          examId,
-          examUserId: examInfo.userId,
-          reqUserId: userId,
-        });
-        return res.status(403).json({
-          success: false,
-          error: 'Forbidden',
-          message: 'You do not have access to this exam session.',
-        });
-      }
-    }
+    req.examInfo = examInfo;
 
     // Mock exams bypass access validation
     if (examInfo.examType === 'mock' || examInfo.isFree) {

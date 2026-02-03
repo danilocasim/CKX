@@ -92,9 +92,21 @@ async function createExam(req, res) {
         examType: req.examType || lab.type || 'full',
       };
 
-      // If user has an access pass, include the pass info for tracking
+      // If user has an access pass, include the pass info for tracking and session expiry
       if (req.accessPass) {
         examData.accessPassId = req.accessPass.passId;
+        examData.startedAt = new Date().toISOString();
+        examData.expiresAt = req.accessPass.expiresAt
+          ? new Date(req.accessPass.expiresAt).toISOString()
+          : null;
+        const start = new Date(examData.startedAt).getTime();
+        const end = examData.expiresAt
+          ? new Date(examData.expiresAt).getTime()
+          : start + 2 * 3600 * 1000;
+        examData.totalAllocatedSeconds = Math.max(
+          0,
+          Math.floor((end - start) / 1000)
+        );
       }
     } catch (error) {
       logger.error('Failed to load lab data', { error: error.message });
@@ -106,6 +118,21 @@ async function createExam(req, res) {
   }
 
   examData.userId = req.userId != null ? req.userId : null;
+
+  // Session lifecycle: started_at, expires_at, total_allocated_seconds (mock = 2h)
+  if (!examData.startedAt) examData.startedAt = new Date().toISOString();
+  if (!examData.expiresAt) {
+    const twoHoursLater = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    examData.expiresAt = twoHoursLater.toISOString();
+  }
+  if (examData.totalAllocatedSeconds == null) {
+    const start = new Date(examData.startedAt).getTime();
+    const end = new Date(examData.expiresAt).getTime();
+    examData.totalAllocatedSeconds = Math.max(
+      0,
+      Math.floor((end - start) / 1000)
+    );
+  }
 
   const result = await examService.createExam(examData);
 
@@ -271,10 +298,11 @@ async function evaluateExam(req, res) {
  */
 async function endExam(req, res) {
   const examId = req.params.examId;
+  const userId = req.userId != null ? req.userId : null;
 
   logger.info('Received request to end exam', { examId });
 
-  const result = await examService.endExam(examId);
+  const result = await examService.endExam(examId, userId);
 
   if (!result.success) {
     return res.status(500).json({
@@ -293,15 +321,12 @@ async function endExam(req, res) {
  */
 async function getExamAnswers(req, res) {
   const examId = req.params.examId;
+  const examInfo = req.examInfo; // Set by requireExamOwnership (fetch by examId+userId)
 
   logger.info('Received request to get exam answers', { examId });
 
   try {
-    // Check if exam exists
-    const examInfo = await redisClient.getExamInfo(examId);
-
     if (!examInfo) {
-      logger.error(`Exam not found with ID: ${examId}`);
       return res.status(404).json({
         error: 'Not Found',
         message: 'Exam not found',

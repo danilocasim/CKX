@@ -8,12 +8,12 @@ const logger = require('./logger');
 
 // Redis key prefixes for different data types
 const KEYS = {
-  EXAM_INFO: 'exam:info:',     // For storing JSON exam information
+  EXAM_INFO: 'exam:info:', // For storing JSON exam information
   EXAM_STATUS: 'exam:status:', // For storing exam status string
   EXAM_RESULT: 'exam:result:', // For storing exam evaluation results
   // Session management keys (multi-session support)
-  ACTIVE_SESSIONS: 'sessions:active',  // Set of active session IDs
-  SESSION_PORTS: 'session:ports:',     // Port allocations per session
+  ACTIVE_SESSIONS: 'sessions:active', // Set of active session IDs
+  SESSION_PORTS: 'session:ports:', // Port allocations per session (includes started_at, expires_at, total_allocated_seconds)
   PORT_ALLOCATIONS: 'ports:allocated', // Hash of allocated ports
   // DEPRECATED: Single exam tracking removed for multi-session support
   // CURRENT_EXAM_ID: 'current-exam-id',
@@ -26,7 +26,9 @@ const CHANNELS = {
 
 // Create Redis client using environment variables
 const redisClient = createClient({
-  url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || 6379}`
+  url: `redis://${process.env.REDIS_HOST || 'localhost'}:${
+    process.env.REDIS_PORT || 6379
+  }`,
 });
 
 // Handle Redis connection events
@@ -65,12 +67,12 @@ async function getClient() {
  * @param {number} [ttl=3600] - Time to live in seconds (default: 1 hour)
  * @returns {Promise<string>} - Returns 'OK' if successful
  */
-async function persistExamInfo(examId, examInfo, ttl = 3600000) {
+async function persistExamInfo(examId, examInfo, ttl = 3600) {
   try {
     const client = await getClient();
     const key = `${KEYS.EXAM_INFO}${examId}`;
     const result = await client.setEx(key, ttl, JSON.stringify(examInfo));
-    
+
     logger.debug(`Persisted exam info for exam ${examId}`);
     return result;
   } catch (error) {
@@ -86,7 +88,7 @@ async function persistExamInfo(examId, examInfo, ttl = 3600000) {
  * @param {number} [ttl=3600] - Time to live in seconds (default: 1 hour)
  * @returns {Promise<string>} - Returns 'OK' if successful
  */
-async function persistExamStatus(examId, status, ttl = 3600000) {
+async function persistExamStatus(examId, status, ttl = 3600) {
   try {
     const client = await getClient();
     const key = `${KEYS.EXAM_STATUS}${examId}`;
@@ -106,13 +108,13 @@ async function persistExamStatus(examId, status, ttl = 3600000) {
  * @param {number} [ttl=3600] - Time to live in seconds (default: 1 hour)
  * @returns {Promise<string>} - Returns 'OK' if successful
  */
-async function persistExamResult(examId, result, ttl = 3600000) {
+async function persistExamResult(examId, result, ttl = 3600) {
   try {
     const client = await getClient();
     const key = `${KEYS.EXAM_RESULT}${examId}`;
     const resultStr = JSON.stringify(result);
     const resultSet = await client.setEx(key, ttl, resultStr);
-    
+
     logger.debug(`Persisted exam result for exam ${examId}`);
     return resultSet;
   } catch (error) {
@@ -125,20 +127,24 @@ async function persistExamResult(examId, result, ttl = 3600000) {
  * Register an active session
  * @param {string} sessionId - Session identifier (examId)
  * @param {Object} sessionData - Session metadata (ports, timestamps, etc.)
- * @param {number} [ttl=3600000] - Time to live in ms (default: 1 hour)
+ * @param {number} [ttl=3600] - Time to live in seconds (default: 1 hour)
  * @returns {Promise<string>} - Returns 'OK' if successful
  */
-async function registerSession(sessionId, sessionData = {}, ttl = 3600000) {
+async function registerSession(sessionId, sessionData = {}, ttl = 3600) {
   try {
     const client = await getClient();
     // Add to active sessions set
     await client.sAdd(KEYS.ACTIVE_SESSIONS, sessionId);
     // Store session metadata
     const sessionKey = `${KEYS.SESSION_PORTS}${sessionId}`;
-    await client.setEx(sessionKey, ttl, JSON.stringify({
-      ...sessionData,
-      registeredAt: new Date().toISOString()
-    }));
+    await client.setEx(
+      sessionKey,
+      ttl,
+      JSON.stringify({
+        ...sessionData,
+        registeredAt: new Date().toISOString(),
+      })
+    );
     logger.debug(`Registered session ${sessionId}`);
     return 'OK';
   } catch (error) {
@@ -200,6 +206,66 @@ async function getSessionData(sessionId) {
 }
 
 /**
+ * Extend session expiry (e.g. when user pays for more time). Updates examInfo, session data, and TTL.
+ * @param {string} examId - Session identifier
+ * @param {string} newExpiresAt - ISO date string for new expiry
+ * @returns {Promise<void>}
+ */
+async function extendSessionExpiry(examId, newExpiresAt) {
+  try {
+    const client = await getClient();
+    const examInfo = await getExamInfo(examId);
+    const sessionData = await getSessionData(examId);
+    if (!examInfo || !sessionData) {
+      logger.warn('extendSessionExpiry: exam or session not found', { examId });
+      return;
+    }
+    const ttlSeconds = Math.min(
+      Math.max(
+        60,
+        Math.ceil((new Date(newExpiresAt).getTime() - Date.now()) / 1000)
+      ),
+      48 * 3600
+    );
+    examInfo.expiresAt = newExpiresAt;
+    if (examInfo.startedAt) {
+      const start = new Date(examInfo.startedAt).getTime();
+      examInfo.totalAllocatedSeconds = Math.max(
+        0,
+        Math.floor((new Date(newExpiresAt).getTime() - start) / 1000)
+      );
+    }
+    await client.setEx(
+      `${KEYS.EXAM_INFO}${examId}`,
+      ttlSeconds,
+      JSON.stringify(examInfo)
+    );
+    sessionData.expires_at = newExpiresAt;
+    if (sessionData.started_at) {
+      const start = new Date(sessionData.started_at).getTime();
+      sessionData.total_allocated_seconds = Math.max(
+        0,
+        Math.floor((new Date(newExpiresAt).getTime() - start) / 1000)
+      );
+    }
+    await client.setEx(
+      `${KEYS.SESSION_PORTS}${examId}`,
+      ttlSeconds,
+      JSON.stringify(sessionData)
+    );
+    const status = await client.get(`${KEYS.EXAM_STATUS}${examId}`);
+    if (status)
+      await client.setEx(`${KEYS.EXAM_STATUS}${examId}`, ttlSeconds, status);
+    logger.info('Session expiry extended', { examId, newExpiresAt });
+  } catch (error) {
+    logger.error(`Failed to extend session expiry: ${error.message}`, {
+      examId,
+    });
+    throw error;
+  }
+}
+
+/**
  * @deprecated Use registerSession() instead. Kept for backward compatibility.
  * Set the current exam ID
  * @param {string} examId - Exam identifier
@@ -207,7 +273,9 @@ async function getSessionData(sessionId) {
  * @returns {Promise<string>} - Returns 'OK' if successful
  */
 async function setCurrentExamId(examId, ttl = 3600000) {
-  logger.warn('setCurrentExamId is deprecated. Use registerSession() for multi-session support.');
+  logger.warn(
+    'setCurrentExamId is deprecated. Use registerSession() for multi-session support.'
+  );
   // For backward compatibility, also register as session
   return registerSession(examId, {}, ttl);
 }
@@ -225,6 +293,35 @@ async function getExamInfo(examId) {
     return data ? JSON.parse(data) : null;
   } catch (error) {
     logger.error(`Failed to get exam info: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Get exam information only if the exam belongs to the given user (session isolation).
+ * Returns exam info when examInfo.userId === userId, or exam is mock (userId null/empty).
+ * Returns null if exam does not exist or belongs to another user (no data leakage).
+ * @param {string} examId - Exam identifier
+ * @param {string|number|null} userId - Authenticated user id, or null for anonymous
+ * @returns {Promise<Object|null>} - Exam info or null if not found / not owned
+ */
+async function getExamInfoForUser(examId, userId) {
+  try {
+    const client = await getClient();
+    const key = `${KEYS.EXAM_INFO}${examId}`;
+    const data = await client.get(key);
+    if (!data) return null;
+    const examInfo = JSON.parse(data);
+    const examUserId = examInfo.userId;
+    if (examUserId != null && examUserId !== '') {
+      if (userId == null || String(userId) !== String(examUserId)) return null;
+    }
+    // Session is invalid if past expires_at
+    const expiresAt = examInfo.expiresAt || examInfo.expires_at;
+    if (expiresAt && new Date(expiresAt) <= new Date()) return null;
+    return examInfo;
+  } catch (error) {
+    logger.error(`Failed to get exam info for user: ${error.message}`);
     throw error;
   }
 }
@@ -269,7 +366,9 @@ async function getExamResult(examId) {
  * @returns {Promise<string|null>} - Returns first active session or null
  */
 async function getCurrentExamId() {
-  logger.warn('getCurrentExamId is deprecated. Use getActiveSessions() for multi-session support.');
+  logger.warn(
+    'getCurrentExamId is deprecated. Use getActiveSessions() for multi-session support.'
+  );
   try {
     const sessions = await getActiveSessions();
     // Return first active session for backward compatibility
@@ -310,7 +409,9 @@ async function updateExamStatus(examId, status) {
  * @returns {Promise<string>} - Returns 'OK' if successful
  */
 async function updateCurrentExamId(examId) {
-  logger.warn('updateCurrentExamId is deprecated. Use registerSession() for multi-session support.');
+  logger.warn(
+    'updateCurrentExamId is deprecated. Use registerSession() for multi-session support.'
+  );
   return setCurrentExamId(examId);
 }
 
@@ -375,7 +476,9 @@ async function deleteExamResult(examId) {
  * @returns {Promise<number>} - Returns 1 if successful, 0 if key didn't exist
  */
 async function deleteCurrentExamId(sessionId = null) {
-  logger.warn('deleteCurrentExamId is deprecated. Use unregisterSession() for multi-session support.');
+  logger.warn(
+    'deleteCurrentExamId is deprecated. Use unregisterSession() for multi-session support.'
+  );
   try {
     if (sessionId) {
       return unregisterSession(sessionId);
@@ -386,7 +489,9 @@ async function deleteCurrentExamId(sessionId = null) {
     for (const session of sessions) {
       await unregisterSession(session);
     }
-    logger.debug(`Deleted current exam ID (cleared ${sessions.length} sessions)`);
+    logger.debug(
+      `Deleted current exam ID (cleared ${sessions.length} sessions)`
+    );
     return sessions.length;
   } catch (error) {
     logger.error(`Failed to delete current exam ID: ${error.message}`);
@@ -402,12 +507,12 @@ async function deleteCurrentExamId(sessionId = null) {
 async function deleteAllExamData(examId) {
   try {
     const client = await getClient();
-    
+
     // Delete all related keys
     const keys = [
       `${KEYS.EXAM_INFO}${examId}`,
       `${KEYS.EXAM_STATUS}${examId}`,
-      `${KEYS.EXAM_RESULT}${examId}`
+      `${KEYS.EXAM_RESULT}${examId}`,
     ];
     const result = await client.del(keys);
     logger.debug(`Deleted all data for exam ${examId}`);
@@ -425,7 +530,9 @@ async function deleteAllExamData(examId) {
  */
 async function createSubscriber() {
   const subscriber = createClient({
-    url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || 6379}`
+    url: `redis://${process.env.REDIS_HOST || 'localhost'}:${
+      process.env.REDIS_PORT || 6379
+    }`,
   });
 
   subscriber.on('error', (err) => {
@@ -485,24 +592,25 @@ module.exports = {
   persistExamInfo,
   persistExamStatus,
   persistExamResult,
-  setCurrentExamId,        // @deprecated
+  setCurrentExamId, // @deprecated
 
   // Read operations
   getExamInfo,
+  getExamInfoForUser,
   getExamStatus,
   getExamResult,
-  getCurrentExamId,        // @deprecated
+  getCurrentExamId, // @deprecated
 
   // Update operations
   updateExamInfo,
   updateExamStatus,
-  updateCurrentExamId,     // @deprecated
+  updateCurrentExamId, // @deprecated
 
   // Delete operations
   deleteExamInfo,
   deleteExamStatus,
   deleteExamResult,
-  deleteCurrentExamId,     // @deprecated
+  deleteCurrentExamId, // @deprecated
   deleteAllExamData,
 
   // Multi-session operations (NEW)
@@ -510,6 +618,7 @@ module.exports = {
   unregisterSession,
   getActiveSessions,
   getSessionData,
+  extendSessionExpiry,
 
   // Pub/Sub operations (for countdown horizontal scaling)
   createSubscriber,
@@ -518,5 +627,5 @@ module.exports = {
 
   // Constants
   KEYS,
-  CHANNELS
-}; 
+  CHANNELS,
+};

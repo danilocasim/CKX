@@ -6,8 +6,8 @@ const http = require('http');
 const socketio = require('socket.io');
 const cookieParser = require('cookie-parser');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const SSHTerminal = require('./services/ssh-terminal');
 const PublicService = require('./services/public-service');
+const terminalSessionManager = require('./services/terminal-session-manager');
 const RouteService = require('./services/route-service');
 const VNCService = require('./services/vnc-service');
 const AuthService = require('./services/auth-service');
@@ -34,13 +34,12 @@ const io = socketio(server);
 // Initialize Auth Service
 const authService = new AuthService();
 
-// Initialize SSH Terminal
-const sshTerminal = new SSHTerminal({
+const sshConfig = {
   host: SSH_HOST,
-  port: SSH_PORT,
+  port: parseInt(SSH_PORT, 10) || 22,
   username: SSH_USER,
   password: SSH_PASSWORD,
-});
+};
 
 // Initialize Public Service
 const publicService = new PublicService(path.join(__dirname, 'public'));
@@ -53,10 +52,35 @@ const vncService = new VNCService({
   password: VNC_PASSWORD,
 });
 
-// SSH terminal namespace
+// SSH terminal namespace: runtime keyed by terminalSessionId only; require terminalSessionId + examId + token
 const sshIO = io.of('/ssh');
-sshIO.on('connection', (socket) => {
-  sshTerminal.handleConnection(socket);
+sshIO.on('connection', async (socket) => {
+  const terminalSessionId =
+    socket.handshake.query.terminalSessionId ||
+    socket.handshake.auth?.terminalSessionId;
+  const examId = socket.handshake.query.examId || socket.handshake.auth?.examId;
+  const token = socket.handshake.query.token || socket.handshake.auth?.token;
+  if (!terminalSessionId || !examId || !token) {
+    socket.emit('error', {
+      message: 'terminalSessionId, examId, and token are required to connect',
+    });
+    socket.disconnect(true);
+    return;
+  }
+  const valid = await terminalSessionManager.validateWithFacilitator(
+    terminalSessionId,
+    examId,
+    token
+  );
+  if (!valid) {
+    socket.emit('error', {
+      message:
+        'Terminal access denied. You do not have access to this terminal session.',
+    });
+    socket.disconnect(true);
+    return;
+  }
+  terminalSessionManager.addSocket(terminalSessionId, socket, sshConfig);
 });
 
 // Initialize Route Service (pass authService for set-cookie route)

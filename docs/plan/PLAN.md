@@ -166,6 +166,7 @@ POST   /api/v1/billing/webhook
 - **Access denial UX**: No `alert()`. Access/start errors shown with inline callout (dismissible) and link to Pricing. Exam loading overlay is not shown when access is denied (overlay closed before showing error).
 - **UI consistency & nav**: Exam home (Home) uses same design system as Pricing (spacing, typography). Nav labels: Exams, Pricing, Dashboard, Account, Sign In / Sign Out. Mobile: burger menu opens a full-width panel with background and visible links; no overflow.
 - **Mock vs paid (UI)**: Mock exams labeled “Free Mock Exam” with note “2-hour session limit” and upgrade path to Pricing. Full-access users see “Full Access Enabled” plus remaining time in the banner. Paid full exams labeled “Full Exam (access pass required)” in the selector.
+- **Terminal runtime isolation (user-scoped)**: SSH runtimes are keyed by `terminal_session.id` (UUID), not by examId. Client sends `terminalSessionId`, `examId`, and Bearer token; server validates ownership; socket attaches only to the SSH connection for that `terminalSessionId`. No shared SSH/TTY/streams between users.
 
 ---
 

@@ -20,6 +20,7 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const accessRoutes = require('./routes/accessRoutes');
 const billingRoutes = require('./routes/billingRoutes');
+const terminalRoutes = require('./routes/terminalRoutes');
 
 // Import services for initialization
 const portAllocator = require('./services/portAllocator');
@@ -38,17 +39,23 @@ app.use(cors()); // Enable CORS for all routes
 // Stripe webhook needs raw body - must be registered BEFORE json parser
 // Only the webhook endpoint needs raw body, other billing routes use JSON
 const billingController = require('./controllers/billingController');
-app.post('/api/v1/billing/webhook', express.raw({ type: 'application/json' }), billingController.handleWebhook);
+app.post(
+  '/api/v1/billing/webhook',
+  express.raw({ type: 'application/json' }),
+  billingController.handleWebhook
+);
 
 app.use(express.json()); // Parse JSON request bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bodies
 
 // HTTP request logging
-app.use(morgan('combined', { 
-  stream: { 
-    write: message => logger.http(message.trim()) 
-  } 
-}));
+app.use(
+  morgan('combined', {
+    stream: {
+      write: (message) => logger.http(message.trim()),
+    },
+  })
+);
 
 // API routes
 app.use('/api/v1', sshRoutes);
@@ -59,13 +66,14 @@ app.use('/api/v1/remote-desktop', remoteDesktopRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/access', accessRoutes);
+app.use('/api/v1/terminal', terminalRoutes);
 app.use('/api/v1/billing', billingRoutes); // Note: webhook is registered separately above
 
 // Root route
 app.get('/', (req, res) => {
   res.json({
     message: 'Facilitator Service API',
-    version: '1.0.0'
+    version: '1.0.0',
   });
 });
 
@@ -74,7 +82,7 @@ app.use((req, res) => {
   logger.warn(`Route not found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({
     error: 'Not Found',
-    message: `The requested resource ${req.originalUrl} was not found`
+    message: `The requested resource ${req.originalUrl} was not found`,
   });
 });
 
@@ -83,7 +91,10 @@ app.use((err, req, res, next) => {
   logger.error('Unhandled error', { error: err.message, stack: err.stack });
   res.status(500).json({
     error: 'Internal Server Error',
-    message: config.env === 'development' ? err.message : 'An unexpected error occurred'
+    message:
+      config.env === 'development'
+        ? err.message
+        : 'An unexpected error occurred',
   });
 });
 
@@ -96,39 +107,54 @@ const io = new Server(server, {
   path: '/countdown/',
 });
 
-// Socket.io authentication middleware
-io.use((socket, next) => {
+// Socket.io authentication middleware: enforce session ownership (no cross-user access)
+io.use(async (socket, next) => {
   const token = socket.handshake.query.token || socket.handshake.auth.token;
   const examId = socket.handshake.query.examId || socket.handshake.auth.examId;
 
-  // Validate examId is provided
   if (!examId) {
     logger.warn('WebSocket connection rejected: missing examId');
     return next(new Error('Missing examId'));
   }
 
-  // Store examId on socket for later use
-  socket.examId = examId;
-
-  // If token is provided, validate it (optional auth for countdown)
+  let userId = null;
   if (token) {
     try {
       const decoded = authService.verifyToken(token);
-      if (decoded.type === 'access') {
-        socket.userId = decoded.userId;
-      }
+      if (decoded.type === 'access') userId = decoded.userId;
     } catch (err) {
-      // Token invalid but we allow anonymous connections for countdown
       logger.debug('WebSocket token invalid, allowing anonymous connection');
     }
   }
 
-  next();
+  socket.userId = userId;
+
+  // Session isolation: only allow access if this exam belongs to this user (or mock for anonymous)
+  try {
+    const examInfo = await redisClient.getExamInfoForUser(examId, userId);
+    if (!examInfo) {
+      logger.warn(
+        'WebSocket connection rejected: exam not found or not owned',
+        { examId, userId }
+      );
+      return next(new Error('Exam not found or access denied'));
+    }
+    socket.examId = examId;
+    next();
+  } catch (err) {
+    logger.error('WebSocket ownership check failed', {
+      error: err.message,
+      examId,
+    });
+    next(new Error('Failed to verify session access'));
+  }
 });
 
 // Socket.io connection handler
 io.on('connection', (socket) => {
-  logger.info(`WebSocket client connected: ${socket.id} for exam ${socket.examId}`);
+  logger.info(
+    `WebSocket client connected: ${socket.id} for exam ${socket.examId}`
+  );
 
   // Handle client joining an exam room
   socket.on('join', async (data) => {
@@ -136,7 +162,10 @@ io.on('connection', (socket) => {
     if (examId) {
       await countdownService.handleClientJoin(socket, examId);
     } else {
-      socket.emit('error', { code: 'MISSING_EXAM_ID', message: 'Exam ID required' });
+      socket.emit('error', {
+        code: 'MISSING_EXAM_ID',
+        message: 'Exam ID required',
+      });
     }
   });
 
@@ -152,7 +181,9 @@ io.on('connection', (socket) => {
 
   // Handle disconnect
   socket.on('disconnect', (reason) => {
-    logger.debug(`WebSocket client disconnected: ${socket.id}, reason: ${reason}`);
+    logger.debug(
+      `WebSocket client disconnected: ${socket.id}, reason: ${reason}`
+    );
   });
 });
 
@@ -195,4 +226,4 @@ server.listen(PORT, () => {
   logger.info(`WebSocket countdown available at /countdown/`);
 });
 
-module.exports = { app, server, io }; // Export for testing 
+module.exports = { app, server, io }; // Export for testing
